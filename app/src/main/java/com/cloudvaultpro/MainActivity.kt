@@ -1,14 +1,17 @@
 package com.cloudvaultpro
 
+import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
-import android.view.View
-import android.widget.*
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -16,58 +19,189 @@ import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
 
+    private val SERVER_URL =
+        "https://cloud-vault-server.onrender.com"
+
     /*
      * IMPORTANT:
-     * यहाँ अपने CloudVault server का HTTPS address डालें।
+     * यहाँ अपने Render Environment Variables वाला
+     * वही API_KEY डालना होगा।
      *
      * Example:
-     * private val SERVER_URL = "https://your-server.onrender.com"
+     * private val API_KEY = "YOUR_REAL_API_KEY"
      */
-    private val SERVER_URL = "https://YOUR-SERVER-URL"
+    private val API_KEY =
+        "YOUR_REAL_API_KEY"
 
-    private lateinit var serverText: TextView
     private lateinit var statusText: TextView
+    private lateinit var storageText: TextView
     private lateinit var filesContainer: LinearLayout
     private lateinit var refreshButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContentView(R.layout.activity_main)
 
-        serverText = findViewById(R.id.serverText)
         statusText = findViewById(R.id.statusText)
+        storageText = findViewById(R.id.storageText)
         filesContainer = findViewById(R.id.filesContainer)
         refreshButton = findViewById(R.id.refreshButton)
 
-        serverText.text = "Server: $SERVER_URL"
-
         refreshButton.setOnClickListener {
-            loadFiles()
+            loadStorage()
+            loadFiles("")
         }
 
-        loadFiles()
+        loadStorage()
+        loadFiles("")
     }
 
-    private fun loadFiles() {
+    // ============================================================
+    // COMMON AUTH
+    // ============================================================
 
-        statusText.text = "Connecting to server..."
-        refreshButton.isEnabled = false
+    private fun addAuth(connection: HttpURLConnection) {
+
+        connection.setRequestProperty(
+            "X-API-Key",
+            API_KEY
+        )
+
+        connection.setRequestProperty(
+            "Accept",
+            "application/json"
+        )
+    }
+
+    // ============================================================
+    // STORAGE
+    // ============================================================
+
+    private fun loadStorage() {
 
         thread {
 
             try {
 
                 val connection =
-                    URL("$SERVER_URL/api/files").openConnection() as HttpURLConnection
+                    URL(
+                        "$SERVER_URL/api/storage"
+                    ).openConnection()
+                            as HttpURLConnection
 
                 connection.requestMethod = "GET"
+
                 connection.connectTimeout = 15000
                 connection.readTimeout = 15000
 
-                val responseCode = connection.responseCode
+                addAuth(connection)
+
+                val code =
+                    connection.responseCode
 
                 val response =
-                    connection.inputStream.bufferedReader().use { it.readText() }
+                    readResponse(
+                        connection,
+                        code
+                    )
+
+                connection.disconnect()
+
+                runOnUiThread {
+
+                    if (code in 200..299) {
+
+                        try {
+
+                            val json =
+                                JSONObject(response)
+
+                            val usedMB =
+                                json.optString(
+                                    "usedMB",
+                                    "0"
+                                )
+
+                            val usedGB =
+                                json.optString(
+                                    "usedGB",
+                                    "0"
+                                )
+
+                            storageText.text =
+                                "Used Storage: $usedMB MB  •  $usedGB GB"
+
+                        } catch {
+
+                            storageText.text =
+                                "Storage information unavailable"
+                        }
+
+                    } else {
+
+                        storageText.text =
+                            "Storage error: HTTP $code"
+                    }
+                }
+
+            } catch (e: Exception) {
+
+                runOnUiThread {
+
+                    storageText.text =
+                        "Storage connection failed"
+                }
+            }
+        }
+    }
+
+    // ============================================================
+    // LIST FILES
+    // ============================================================
+
+    private fun loadFiles(currentPath: String) {
+
+        runOnUiThread {
+
+            statusText.text =
+                "☁ Connecting to CloudVault..."
+
+            refreshButton.isEnabled = false
+        }
+
+        thread {
+
+            try {
+
+                val encodedPath =
+                    URLEncoder.encode(
+                        currentPath,
+                        "UTF-8"
+                    )
+
+                val url =
+                    "$SERVER_URL/api/files?path=$encodedPath"
+
+                val connection =
+                    URL(url).openConnection()
+                            as HttpURLConnection
+
+                connection.requestMethod = "GET"
+
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+
+                addAuth(connection)
+
+                val code =
+                    connection.responseCode
+
+                val response =
+                    readResponse(
+                        connection,
+                        code
+                    )
 
                 connection.disconnect()
 
@@ -75,12 +209,20 @@ class MainActivity : AppCompatActivity() {
 
                     refreshButton.isEnabled = true
 
-                    if (responseCode in 200..299) {
-                        showFiles(response)
-                        statusText.text = "Server connected"
-                    } else {
+                    if (code in 200..299) {
+
+                        showFiles(
+                            response,
+                            currentPath
+                        )
+
                         statusText.text =
-                            "Server error: HTTP $responseCode"
+                            "✓ CloudVault connected"
+
+                    } else {
+
+                        statusText.text =
+                            "Server error: HTTP $code\n$response"
                     }
                 }
 
@@ -91,161 +233,246 @@ class MainActivity : AppCompatActivity() {
                     refreshButton.isEnabled = true
 
                     statusText.text =
-                        "Connection failed: ${e.message}"
+                        "Connection failed:\n${e.message}"
                 }
             }
         }
     }
 
-    private fun showFiles(json: String) {
+    // ============================================================
+    // SHOW FILES
+    // ============================================================
+
+    private fun showFiles(
+        response: String,
+        currentPath: String
+    ) {
 
         filesContainer.removeAllViews()
 
         try {
 
-            val array = JSONArray(json)
+            val root =
+                JSONObject(response)
 
-            if (array.length() == 0) {
+            val items =
+                root.optJSONArray("items")
+                    ?: JSONArray()
 
-                val empty = TextView(this)
-                empty.text = "No files on server"
+            if (items.length() == 0) {
+
+                val empty =
+                    TextView(this)
+
+                empty.text =
+                    "☁ No files found"
+
                 empty.textSize = 17f
+
+                empty.setPadding(
+                    10,
+                    30,
+                    10,
+                    30
+                )
 
                 filesContainer.addView(empty)
 
                 return
             }
 
-            for (i in 0 until array.length()) {
+            for (
+                i in 0 until items.length()
+            ) {
 
-                val item = array.getJSONObject(i)
+                val item =
+                    items.getJSONObject(i)
 
-                val name = item.optString("name")
-                val size = item.optLong("size", 0)
+                val name =
+                    item.optString("name")
 
-                addFileRow(name, size)
+                val type =
+                    item.optString("type")
+
+                val size =
+                    item.optLong("size", 0)
+
+                val path =
+                    item.optString("path")
+
+                addFileItem(
+                    name,
+                    type,
+                    size,
+                    path
+                )
             }
 
         } catch (e: Exception) {
 
-            /*
-             * Some APIs return:
-             * { "files": [...] }
-             */
-
-            try {
-
-                val root = org.json.JSONObject(json)
-                val array = root.optJSONArray("files")
-
-                if (array != null) {
-
-                    for (i in 0 until array.length()) {
-
-                        val item = array.getJSONObject(i)
-
-                        val name = item.optString("name")
-                        val size = item.optLong("size", 0)
-
-                        addFileRow(name, size)
-                    }
-
-                    return
-                }
-
-            } catch (_: Exception) {
-            }
-
-            statusText.text = "Invalid server response"
+            statusText.text =
+                "Invalid server response:\n${e.message}"
         }
     }
 
-    private fun addFileRow(name: String, size: Long) {
+    // ============================================================
+    // FILE ITEM
+    // ============================================================
 
-        val row = LinearLayout(this)
+    private fun addFileItem(
+        name: String,
+        type: String,
+        size: Long,
+        path: String
+    ) {
 
-        row.orientation = LinearLayout.VERTICAL
-        row.setPadding(0, 20, 0, 20)
+        val box =
+            LinearLayout(this)
 
-        val title = TextView(this)
+        box.orientation =
+            LinearLayout.VERTICAL
 
-        title.text =
-            "$name\n${formatSize(size)}"
+        box.setPadding(
+            10,
+            15,
+            10,
+            15
+        )
+
+        val title =
+            TextView(this)
+
+        if (type == "folder") {
+
+            title.text =
+                "📁 $name"
+
+        } else {
+
+            title.text =
+                "📄 $name\n${formatSize(size)}"
+        }
 
         title.textSize = 17f
 
-        val buttons = LinearLayout(this)
+        box.addView(title)
 
-        buttons.orientation = LinearLayout.HORIZONTAL
+        if (type == "file") {
 
-        val downloadButton = Button(this)
-        downloadButton.text = "Download"
+            val buttons =
+                LinearLayout(this)
 
-        val deleteButton = Button(this)
-        deleteButton.text = "Delete"
+            buttons.orientation =
+                LinearLayout.HORIZONTAL
 
-        downloadButton.setOnClickListener {
-            downloadFile(name)
+            val download =
+                Button(this)
+
+            download.text =
+                "⬇ Download"
+
+            val delete =
+                Button(this)
+
+            delete.text =
+                "🗑 Delete"
+
+            buttons.addView(
+                download
+            )
+
+            buttons.addView(
+                delete
+            )
+
+            download.setOnClickListener {
+
+                downloadFile(path)
+            }
+
+            delete.setOnClickListener {
+
+                confirmDelete(path)
+            }
+
+            box.addView(buttons)
+
+        } else {
+
+            val open =
+                Button(this)
+
+            open.text =
+                "Open Folder"
+
+            open.setOnClickListener {
+
+                loadFiles(path)
+            }
+
+            box.addView(open)
         }
 
-        deleteButton.setOnClickListener {
-
-            val confirm = AlertDialog.Builder(this)
-                .setTitle("Delete remote file?")
-                .setMessage(
-                    "This will delete '$name' from CloudVaultPro server."
-                )
-                .setPositiveButton("Delete") { _, _ ->
-                    deleteFile(name)
-                }
-                .setNegativeButton("Cancel", null)
-                .create()
-
-            confirm.show()
-        }
-
-        buttons.addView(downloadButton)
-        buttons.addView(deleteButton)
-
-        row.addView(title)
-        row.addView(buttons)
-
-        filesContainer.addView(row)
+        filesContainer.addView(box)
     }
 
-    private fun downloadFile(name: String) {
+    // ============================================================
+    // DOWNLOAD
+    // ============================================================
+
+    private fun downloadFile(
+        filePath: String
+    ) {
 
         try {
 
-            val encodedName =
-                URLEncoder.encode(name, "UTF-8")
+            val encoded =
+                URLEncoder.encode(
+                    filePath,
+                    "UTF-8"
+                )
 
-            val url =
-                "$SERVER_URL/api/files/download/$encodedName"
+            val downloadUrl =
+                "$SERVER_URL/api/download?path=$encoded"
 
             val request =
-                DownloadManager.Request(Uri.parse(url))
+                DownloadManager.Request(
+                    Uri.parse(downloadUrl)
+                )
 
-            request.setTitle(name)
-            request.setDescription("Downloading from CloudVaultPro")
+            request.addRequestHeader(
+                "X-API-Key",
+                API_KEY
+            )
+
+            request.setTitle(
+                filePath.substringAfterLast("/")
+            )
+
+            request.setDescription(
+                "Downloading from CloudVaultPro"
+            )
 
             request.setNotificationVisibility(
-                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                DownloadManager
+                    .Request
+                    .VISIBILITY_VISIBLE_NOTIFY_COMPLETED
             )
 
             request.setDestinationInExternalPublicDir(
                 Environment.DIRECTORY_DOWNLOADS,
-                name
+                filePath.substringAfterLast("/")
             )
 
             val manager =
-                getSystemService(Context.DOWNLOAD_SERVICE)
-                        as DownloadManager
+                getSystemService(
+                    Context.DOWNLOAD_SERVICE
+                ) as DownloadManager
 
             manager.enqueue(request)
 
             statusText.text =
-                "Download started: $name"
+                "⬇ Download started"
 
         } catch (e: Exception) {
 
@@ -254,26 +481,97 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun deleteFile(name: String) {
+    // ============================================================
+    // DELETE CONFIRMATION
+    // ============================================================
 
-        statusText.text = "Deleting $name..."
+    private fun confirmDelete(
+        filePath: String
+    ) {
+
+        AlertDialog.Builder(this)
+            .setTitle("Delete file?")
+            .setMessage(
+                "Delete this file from CloudVault?\n\n$filePath"
+            )
+            .setPositiveButton(
+                "Delete"
+            ) { _, _ ->
+
+                deleteFile(filePath)
+            }
+            .setNegativeButton(
+                "Cancel",
+                null
+            )
+            .show()
+    }
+
+    // ============================================================
+    // DELETE
+    // ============================================================
+
+    private fun deleteFile(
+        filePath: String
+    ) {
+
+        statusText.text =
+            "Deleting..."
 
         thread {
 
             try {
 
-                val encodedName =
-                    URLEncoder.encode(name, "UTF-8")
-
                 val connection =
-                    URL("$SERVER_URL/api/files/$encodedName")
-                        .openConnection() as HttpURLConnection
+                    URL(
+                        "$SERVER_URL/api/files"
+                    ).openConnection()
+                            as HttpURLConnection
 
-                connection.requestMethod = "DELETE"
-                connection.connectTimeout = 15000
-                connection.readTimeout = 15000
+                connection.requestMethod =
+                    "DELETE"
 
-                val code = connection.responseCode
+                connection.connectTimeout =
+                    15000
+
+                connection.readTimeout =
+                    15000
+
+                connection.doOutput =
+                    true
+
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json"
+                )
+
+                addAuth(connection)
+
+                val body =
+                    JSONObject()
+                        .put(
+                            "path",
+                            filePath
+                        )
+                        .toString()
+
+                connection.outputStream.use {
+
+                    it.write(
+                        body.toByteArray(
+                            Charsets.UTF_8
+                        )
+                    )
+                }
+
+                val code =
+                    connection.responseCode
+
+                val response =
+                    readResponse(
+                        connection,
+                        code
+                    )
 
                 connection.disconnect()
 
@@ -282,14 +580,15 @@ class MainActivity : AppCompatActivity() {
                     if (code in 200..299) {
 
                         statusText.text =
-                            "Deleted: $name"
+                            "✓ Deleted successfully"
 
-                        loadFiles()
+                        loadStorage()
+                        loadFiles("")
 
                     } else {
 
                         statusText.text =
-                            "Delete failed: HTTP $code"
+                            "Delete failed: HTTP $code\n$response"
                     }
                 }
 
@@ -298,28 +597,65 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
 
                     statusText.text =
-                        "Delete failed: ${e.message}"
+                        "Delete failed:\n${e.message}"
                 }
             }
         }
     }
 
-    private fun formatSize(bytes: Long): String {
+    // ============================================================
+    // RESPONSE
+    // ============================================================
 
-        if (bytes <= 0) return "0 B"
+    private fun readResponse(
+        connection: HttpURLConnection,
+        code: Int
+    ): String {
 
-        val kb = bytes / 1024.0
+        val stream =
+            if (code in 200..299) {
+
+                connection.inputStream
+
+            } else {
+
+                connection.errorStream
+            }
+
+        return stream
+            ?.bufferedReader()
+            ?.use {
+                it.readText()
+            }
+            ?: ""
+    }
+
+    // ============================================================
+    // FORMAT SIZE
+    // ============================================================
+
+    private fun formatSize(
+        bytes: Long
+    ): String {
+
+        if (bytes <= 0)
+            return "0 B"
+
+        val kb =
+            bytes / 1024.0
 
         if (kb < 1024)
-            return String.format("%.1f KB", kb)
+            return "%.1f KB".format(kb)
 
-        val mb = kb / 1024.0
+        val mb =
+            kb / 1024.0
 
         if (mb < 1024)
-            return String.format("%.1f MB", mb)
+            return "%.1f MB".format(mb)
 
-        val gb = mb / 1024.0
+        val gb =
+            mb / 1024.0
 
-        return String.format("%.2f GB", gb)
+        return "%.2f GB".format(gb)
     }
 }
