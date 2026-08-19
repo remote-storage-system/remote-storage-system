@@ -3,7 +3,6 @@ const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
 
-// Remote control routes
 const {
     registerRemoteRoutes
 } = require("../remote.js");
@@ -19,7 +18,7 @@ const PORT = Number(
 // ============================================================
 
 const API_KEY =
-    process.env.API_KEY || "";
+    String(process.env.API_KEY || "").trim();
 
 const STORAGE_ROOT =
     process.env.STORAGE_PATH ||
@@ -37,6 +36,13 @@ const TEMP_DIR =
         "chunks"
     );
 
+// public folder is one level above /server
+const PUBLIC_DIR =
+    path.join(
+        __dirname,
+        "../public"
+    );
+
 // 5 MB chunks
 const CHUNK_SIZE =
     5 * 1024 * 1024;
@@ -47,6 +53,7 @@ const MAX_FILE_SIZE =
     1024 *
     1024 *
     1024;
+
 
 // ============================================================
 // CREATE DIRECTORIES
@@ -66,21 +73,26 @@ fs.mkdirSync(
     }
 );
 
+
 // ============================================================
 // MIDDLEWARE
 // ============================================================
 
-app.disable("x-powered-by");
+app.disable(
+    "x-powered-by"
+);
 
 app.use(
     cors({
         origin: "*",
+
         methods: [
             "GET",
             "POST",
             "DELETE",
             "OPTIONS"
         ],
+
         allowedHeaders: [
             "Content-Type",
             "Authorization",
@@ -102,6 +114,7 @@ app.use(
     })
 );
 
+
 // ============================================================
 // API AUTHENTICATION
 // ============================================================
@@ -112,31 +125,23 @@ function authenticate(
     next
 ) {
 
-    /*
-     * API_KEY must be configured in Render.
-     *
-     * Client can send:
-     *
-     * X-API-Key: your-secret
-     *
-     * OR
-     *
-     * Authorization: Bearer your-secret
-     */
-
     if (!API_KEY) {
 
         return res.status(503).json({
+
             success: false,
+
             error:
                 "Server API key is not configured"
+
         });
+
     }
 
     const xApiKey =
         String(
             req.headers["x-api-key"] || ""
-        );
+        ).trim();
 
     const authorization =
         String(
@@ -157,6 +162,7 @@ function authenticate(
             authorization
                 .slice(7)
                 .trim();
+
     }
 
     if (
@@ -165,14 +171,20 @@ function authenticate(
     ) {
 
         return res.status(401).json({
+
             success: false,
+
             error:
                 "Unauthorized"
+
         });
+
     }
 
     next();
+
 }
+
 
 // ============================================================
 // SAFE PATH
@@ -190,6 +202,7 @@ function safePath(
         throw new Error(
             "Path required"
         );
+
     }
 
     let input =
@@ -210,8 +223,9 @@ function safePath(
         );
 
     const normalized =
-        path.posix
-            .normalize(input);
+        path.posix.normalize(
+            input
+        );
 
     if (
         normalized === "." ||
@@ -219,6 +233,7 @@ function safePath(
     ) {
 
         return FILES_DIR;
+
     }
 
     const parts =
@@ -257,13 +272,16 @@ function safePath(
         throw new Error(
             "Invalid path"
         );
+
     }
 
     return target;
+
 }
 
+
 // ============================================================
-// RELATIVE PATH
+// RELATIVE STORAGE PATH
 // ============================================================
 
 function relativeStoragePath(
@@ -279,19 +297,54 @@ function relativeStoragePath(
             /\\/g,
             "/"
         );
+
 }
 
+
 // ============================================================
-// HEALTH PAGE
+// CLOUD VAULT WEB PANEL
 // ============================================================
+
+if (
+    fs.existsSync(
+        PUBLIC_DIR
+    )
+) {
+
+    app.use(
+        express.static(
+            PUBLIC_DIR
+        )
+    );
+
+}
 
 app.get(
     "/",
     (req, res) => {
 
+        const indexFile =
+            path.join(
+                PUBLIC_DIR,
+                "index.html"
+            );
+
+        if (
+            fs.existsSync(
+                indexFile
+            )
+        ) {
+
+            return res.sendFile(
+                indexFile
+            );
+
+        }
+
         res.status(200).send(`
 <!DOCTYPE html>
-<html lang="en">
+
+<html>
 
 <head>
 
@@ -299,26 +352,20 @@ app.get(
 
 <meta
     name="viewport"
-    content="width=device-width, initial-scale=1.0"
+    content="width=device-width,initial-scale=1"
 >
 
 <title>Cloud Vault Pro</title>
 
 <style>
 
-* {
-    box-sizing: border-box;
-}
+body{
+    margin:0;
+    min-height:100vh;
 
-body {
-    margin: 0;
-    min-height: 100vh;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    padding: 20px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
 
     background:
         radial-gradient(
@@ -327,93 +374,45 @@ body {
             #020617 60%
         );
 
-    color: white;
+    color:white;
 
     font-family:
         system-ui,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
         sans-serif;
 }
 
-.card {
-    width: 100%;
-    max-width: 620px;
+.card{
+    width:90%;
+    max-width:600px;
 
-    padding: 30px;
+    padding:30px;
 
-    border-radius: 28px;
+    border-radius:25px;
 
     background:
-        rgba(
-            15,
-            23,
-            42,
-            0.92
-        );
+        rgba(15,23,42,.95);
 
-    border:
-        1px solid
-        rgba(
-            148,
-            163,
-            184,
-            0.2
-        );
+    text-align:center;
 
     box-shadow:
         0 25px 80px
-        rgba(
-            0,
-            0,
-            0,
-            0.45
-        );
+        rgba(0,0,0,.5);
 }
 
-.logo {
-    font-size: 48px;
-}
+.status{
+    display:inline-block;
 
-h1 {
-    margin: 8px 0;
-}
+    margin-top:10px;
 
-.status {
-    display: inline-block;
+    padding:8px 15px;
 
-    margin-top: 12px;
-    padding: 8px 14px;
+    border-radius:999px;
 
-    border-radius: 999px;
+    background:#052e16;
 
-    background: #052e16;
-    color: #4ade80;
+    color:#4ade80;
 
-    font-weight: 700;
-}
-
-.info {
-    margin-top: 25px;
-
-    line-height: 1.8;
-
-    color: #cbd5e1;
-}
-
-.endpoint {
-    margin-top: 20px;
-
-    padding: 15px;
-
-    border-radius: 15px;
-
-    background: #020617;
-
-    font-family: monospace;
-
-    word-break: break-all;
+    font-weight:700;
 }
 
 </style>
@@ -424,30 +423,25 @@ h1 {
 
 <div class="card">
 
-<div class="logo">☁️</div>
+<div style="font-size:50px">
+☁️
+</div>
 
-<h1>Cloud Vault Pro</h1>
+<h1>
+Cloud Vault Pro
+</h1>
 
 <div class="status">
 ● SERVER ONLINE
 </div>
 
-<div class="info">
-
 <p>
-Your Cloud Vault server is running successfully.
+Server is running successfully.
 </p>
 
 <p>
-The server is ready for the storage controller
-and Android device connection.
+Public folder was not found.
 </p>
-
-</div>
-
-<div class="endpoint">
-GET /api/health
-</div>
 
 </div>
 
@@ -458,6 +452,7 @@ GET /api/health
 
     }
 );
+
 
 // ============================================================
 // HEALTH API
@@ -480,6 +475,11 @@ app.get(
             version:
                 "2.0.0",
 
+            authentication:
+                API_KEY
+                    ? "enabled"
+                    : "not configured",
+
             timestamp:
                 new Date().toISOString()
 
@@ -487,6 +487,7 @@ app.get(
 
     }
 );
+
 
 // ============================================================
 // AUTHENTICATED API
@@ -496,6 +497,7 @@ app.use(
     "/api",
     authenticate
 );
+
 
 // ============================================================
 // SERVER STATUS
@@ -526,6 +528,7 @@ app.get(
     }
 );
 
+
 // ============================================================
 // STORAGE INFORMATION
 // ============================================================
@@ -555,6 +558,7 @@ async function calculateStorage(
         } catch {
 
             return;
+
         }
 
         for (
@@ -600,7 +604,9 @@ async function calculateStorage(
     );
 
     return total;
+
 }
+
 
 app.get(
     "/api/storage",
@@ -654,8 +660,9 @@ app.get(
     }
 );
 
+
 // ============================================================
-// LIST FILES / FOLDERS
+// LIST FILES
 // ============================================================
 
 app.get(
@@ -797,6 +804,7 @@ app.get(
                         )
                             ? -1
                             : 1;
+
                     }
 
                     return a.name.localeCompare(
@@ -840,6 +848,7 @@ app.get(
 
     }
 );
+
 
 // ============================================================
 // CREATE FOLDER
@@ -898,11 +907,6 @@ app.post(
 
         } catch (error) {
 
-            console.error(
-                "Folder error:",
-                error
-            );
-
             res.status(500).json({
 
                 success:
@@ -917,6 +921,7 @@ app.post(
 
     }
 );
+
 
 // ============================================================
 // DOWNLOAD FILE
@@ -1010,11 +1015,6 @@ app.get(
 
         } catch (error) {
 
-            console.error(
-                "Download error:",
-                error
-            );
-
             if (
                 !res.headersSent
             ) {
@@ -1036,8 +1036,9 @@ app.get(
     }
 );
 
+
 // ============================================================
-// DELETE FILE OR FOLDER
+// DELETE FILE / FOLDER
 // ============================================================
 
 app.delete(
@@ -1141,11 +1142,6 @@ app.delete(
 
         } catch (error) {
 
-            console.error(
-                "Delete error:",
-                error
-            );
-
             res.status(500).json({
 
                 success:
@@ -1161,8 +1157,9 @@ app.delete(
     }
 );
 
+
 // ============================================================
-// RENAME FILE / FOLDER
+// RENAME
 // ============================================================
 
 app.post(
@@ -1274,11 +1271,6 @@ app.post(
 
         } catch (error) {
 
-            console.error(
-                "Rename error:",
-                error
-            );
-
             res.status(500).json({
 
                 success:
@@ -1293,6 +1285,7 @@ app.post(
 
     }
 );
+
 
 // ============================================================
 // CHUNK UPLOAD
@@ -1536,6 +1529,7 @@ app.post(
     }
 );
 
+
 // ============================================================
 // COMPLETE UPLOAD
 // ============================================================
@@ -1683,10 +1677,6 @@ app.post(
                 }
             );
 
-            // ------------------------------------------------
-            // If same filename exists, create unique name
-            // ------------------------------------------------
-
             let targetPath =
                 finalPath;
 
@@ -1716,10 +1706,6 @@ app.post(
                     );
 
             }
-
-            // ------------------------------------------------
-            // Create final file
-            // ------------------------------------------------
 
             const output =
                 fs.createWriteStream(
@@ -1847,11 +1833,8 @@ app.post(
                 } catch {}
 
                 throw error;
-            }
 
-            // ------------------------------------------------
-            // Remove temporary chunks
-            // ------------------------------------------------
+            }
 
             await fs.promises.rm(
                 uploadDirectory,
@@ -1872,11 +1855,6 @@ app.post(
                 relativeStoragePath(
                     targetPath
                 );
-
-            console.log(
-                "UPLOAD COMPLETE:",
-                savedPath
-            );
 
             res.json({
 
@@ -1915,6 +1893,7 @@ app.post(
 
     }
 );
+
 
 // ============================================================
 // CANCEL UPLOAD
@@ -1978,11 +1957,6 @@ app.delete(
 
         } catch (error) {
 
-            console.error(
-                "Cancel upload error:",
-                error
-            );
-
             res.status(500).json({
 
                 success:
@@ -1998,22 +1972,15 @@ app.delete(
     }
 );
 
+
 // ============================================================
 // REMOTE DEVICE ROUTES
-// ============================================================
-//
-// IMPORTANT:
-// These routes are registered AFTER:
-//
-// app.use("/api", authenticate);
-//
-// Therefore remote control APIs also require API_KEY.
-//
 // ============================================================
 
 registerRemoteRoutes(
     app
 );
+
 
 // ============================================================
 // GLOBAL ERROR HANDLER
@@ -2055,6 +2022,7 @@ app.use(
     }
 );
 
+
 // ============================================================
 // START SERVER
 // ============================================================
@@ -2079,6 +2047,11 @@ app.listen(
         console.log(
             "Port:",
             PORT
+        );
+
+        console.log(
+            "Public:",
+            PUBLIC_DIR
         );
 
         console.log(
