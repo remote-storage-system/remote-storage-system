@@ -2,124 +2,481 @@
 
 <ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F7FB">
+
+    android:background="#05070B"
+
+    android:fillViewport="true">
 
     <LinearLayout
+
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+
         android:orientation="vertical"
+
         android:padding="20dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="☁️ CloudVaultPro"
-            android:textColor="#172033"
-            android:textSize="30sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:text="Your Personal Cloud Storage"
-            android:textColor="#667085"
-            android:textSize="16sp" />
+        <!-- ================================================= -->
+        <!-- HEADER -->
+        <!-- ================================================= -->
 
         <LinearLayout
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
-            android:background="#FFFFFF"
+
             android:orientation="vertical"
-            android:padding="18dp">
+
+            android:gravity="center"
+
+            android:padding="20dp"
+
+            android:background="#101827">
 
             <TextView
+
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="SERVER STATUS"
-                android:textColor="#667085"
-                android:textSize="12sp"
+
+                android:text="☁️"
+
+                android:textSize="48sp" />
+
+            <TextView
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:text="Cloud Vault Pro"
+
+                android:textColor="#FFFFFF"
+
+                android:textSize="27sp"
+
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/serverText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="CloudVault server"
-                android:textColor="#172033"
-                android:textSize="15sp" />
 
-            <TextView
-                android:id="@+id/statusText"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Connecting..."
-                android:textColor="#16794A"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+
+                android:layout_marginTop="6dp"
+
+                android:text="Private Remote Storage"
+
+                android:textColor="#94A3B8"
+
+                android:textSize="14sp" />
 
         </LinearLayout>
 
-        <Button
-            android:id="@+id/refreshButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="🔄 Refresh Storage"
-            android:textSize="16sp" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="28dp"
-            android:text="STORAGE"
-            android:textColor="#667085"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+        <!-- ================================================= -->
+        <!-- SERVER -->
+        <!-- ================================================= -->
 
         <LinearLayout
-            android:id="@+id/filesContainer"
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="#FFFFFF"
+
+            android:layout_marginTop="16dp"
+
             android:orientation="vertical"
-            android:padding="16dp" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:orientation="horizontal">
+            android:padding="18dp"
+
+            android:background="#0F172A">
+
+            <TextView
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:text="🔐 Server Connection"
+
+                android:textColor="#FFFFFF"
+
+                android:textSize="19sp"
+
+                android:textStyle="bold" />
+
+            <TextView
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="8dp"
+
+                android:text="Cloud Vault Server"
+
+                android:textColor="#94A3B8"
+
+                android:textSize="13sp" />
+
+            <TextView
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="4dp"
+
+                android:text="https://cloud-vault-server.onrender.com"
+
+                android:textColor="#60A5FA"
+
+                android:textSize="12sp" />
+
+            <EditText
+
+                android:id="@+id/apiKeyInput"
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="14dp"
+
+                android:hint="Render API Key"
+
+                android:inputType="textPassword"
+
+                android:padding="14dp"
+
+                android:textColor="#FFFFFF"
+
+                android:textColorHint="#64748B"
+
+                android:background="#020617" />
 
             <Button
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="📤 Upload" />
 
-            <Button
-                android:layout_width="0dp"
+                android:id="@+id/connectButton"
+
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:text="⬇ Download" />
+
+                android:layout_marginTop="12dp"
+
+                android:text="🔑 Connect Server"
+
+                android:textAllCaps="false"
+
+                android:textStyle="bold" />
 
         </LinearLayout>
 
-        <TextView
+
+        <!-- ================================================= -->
+        <!-- PAIR PHONE -->
+        <!-- ================================================= -->
+
+        <LinearLayout
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="25dp"
+
+            android:layout_marginTop="16dp"
+
+            android:orientation="vertical"
+
+            android:padding="18dp"
+
+            android:background="#111827">
+
+            <TextView
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:text="📱 Pair This Phone"
+
+                android:textColor="#FFFFFF"
+
+                android:textSize="19sp"
+
+                android:textStyle="bold" />
+
+            <TextView
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="8dp"
+
+                android:text="Website पर Generate Pairing Code दबाएँ और यहाँ 6 digit code डालें."
+
+                android:textColor="#94A3B8"
+
+                android:textSize="13sp" />
+
+            <EditText
+
+                android:id="@+id/pairingCodeInput"
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="14dp"
+
+                android:hint="6 digit pairing code"
+
+                android:inputType="number"
+
+                android:maxLength="6"
+
+                android:gravity="center"
+
+                android:textColor="#FFFFFF"
+
+                android:textColorHint="#64748B"
+
+                android:textSize="20sp"
+
+                android:background="#020617" />
+
+            <Button
+
+                android:id="@+id/pairButton"
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="12dp"
+
+                android:text="🔗 Pair Phone"
+
+                android:textAllCaps="false"
+
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+
+        <!-- ================================================= -->
+        <!-- DEVICE -->
+        <!-- ================================================= -->
+
+        <LinearLayout
+
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+
+            android:layout_marginTop="16dp"
+
+            android:orientation="vertical"
+
+            android:padding="18dp"
+
+            android:background="#0F172A">
+
+            <TextView
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:text="📲 Device"
+
+                android:textColor="#FFFFFF"
+
+                android:textSize="19sp"
+
+                android:textStyle="bold" />
+
+            <TextView
+
+                android:id="@+id/deviceText"
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="10dp"
+
+                android:text="Not paired"
+
+                android:textColor="#94A3B8"
+
+                android:textSize="13sp" />
+
+        </LinearLayout>
+
+
+        <!-- ================================================= -->
+        <!-- STORAGE -->
+        <!-- ================================================= -->
+
+        <LinearLayout
+
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+
+            android:layout_marginTop="16dp"
+
+            android:orientation="vertical"
+
+            android:padding="18dp"
+
+            android:background="#111827">
+
+            <TextView
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:text="📦 Storage"
+
+                android:textColor="#FFFFFF"
+
+                android:textSize="19sp"
+
+                android:textStyle="bold" />
+
+            <TextView
+
+                android:id="@+id/fileCountText"
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="8dp"
+
+                android:text="Files synced: 0"
+
+                android:textColor="#94A3B8"
+
+                android:textSize="13sp" />
+
+            <Button
+
+                android:id="@+id/storageButton"
+
+                android:layout_width="match_parent"
+
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="12dp"
+
+                android:text="📂 Select Storage Folder"
+
+                android:textAllCaps="false"
+
+                android:textStyle="bold" />
+
+            <Button
+
+                android:id="@+id/refreshButton"
+
+                android:layout_width="match_parent"
+
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="8dp"
+
+                android:text="🔄 Scan & Sync Files"
+
+                android:textAllCaps="false" />
+
+        </LinearLayout>
+
+
+        <!-- ================================================= -->
+        <!-- STATUS -->
+        <!-- ================================================= -->
+
+        <LinearLayout
+
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+
+            android:layout_marginTop="16dp"
+
+            android:orientation="vertical"
+
             android:gravity="center"
-            android:text="CloudVaultPro • Secure Personal Storage"
-            android:textColor="#98A2B3"
-            android:textSize="13sp" />
+
+            android:padding="18dp"
+
+            android:background="#020617">
+
+            <ProgressBar
+
+                android:id="@+id/progress"
+
+                android:layout_width="wrap_content"
+
+                android:layout_height="wrap_content"
+
+                android:visibility="gone" />
+
+            <TextView
+
+                android:id="@+id/statusText"
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="8dp"
+
+                android:gravity="center"
+
+                android:text="Ready"
+
+                android:textColor="#94A3B8"
+
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
+
+        <!-- ================================================= -->
+        <!-- FEATURES -->
+        <!-- ================================================= -->
+
+        <LinearLayout
+
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+
+            android:layout_marginTop="16dp"
+
+            android:orientation="vertical"
+
+            android:padding="18dp"
+
+            android:background="#0F172A">
+
+            <TextView
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:text="✨ Cloud Vault Features"
+
+                android:textColor="#FFFFFF"
+
+                android:textSize="18sp"
+
+                android:textStyle="bold" />
+
+            <TextView
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="12dp"
+
+                android:text="☁️ Remote Storage\n\n📱 Multi Phone Pairing\n\n📂 File Synchronization\n\n🗑️ Remote Delete\n\n⬇️ Remote Download Commands\n\n🔄 Automatic Heartbeat\n\n🔐 API Key Authentication"
+
+                android:textColor="#CBD5E1"
+
+                android:textSize="14sp"
+
+                android:lineSpacingExtra="5dp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
