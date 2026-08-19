@@ -1,5 +1,4 @@
-activity_main.xml
-
+cat > app/src/main/res/layout/activity_main.xml <<'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 
 <ScrollView
@@ -141,3 +140,4 @@ activity_main.xml
     </LinearLayout>
 
 </ScrollView>
+EOF
