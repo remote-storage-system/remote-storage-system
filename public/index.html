@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Remote Storage Control</title>
+
+<style>
+*{box-sizing:border-box}
+
+body{
+    margin:0;
+    padding:16px;
+    min-height:100vh;
+    background:
+        radial-gradient(circle at top,#18233b,#05070b 55%);
+    color:#fff;
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+
+.container{
+    max-width:700px;
+    margin:auto;
+}
+
+.card{
+    background:linear-gradient(
+        145deg,
+        rgba(20,30,48,.96),
+        rgba(7,12,22,.97)
+    );
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:22px;
+    padding:20px;
+    margin-bottom:16px;
+    box-shadow:0 20px 60px rgba(0,0,0,.45);
+}
+
+.logo{
+    text-align:center;
+    font-size:27px;
+    font-weight:800;
+    background:linear-gradient(90deg,#a78bfa,#60a5fa);
+    -webkit-background-clip:text;
+    color:transparent;
+}
+
+.subtitle{
+    text-align:center;
+    color:#94a3b8;
+    font-size:13px;
+    margin:8px 0 20px;
+}
+
+h2{
+    margin-top:0;
+    font-size:19px;
+}
+
+button{
+    width:100%;
+    border:0;
+    border-radius:13px;
+    padding:14px;
+    margin-top:10px;
+    color:#fff;
+    font-size:15px;
+    font-weight:800;
+    cursor:pointer;
+}
+
+.primary{
+    background:linear-gradient(135deg,#7c3aed,#4f46e5);
+}
+
+.green{
+    background:linear-gradient(135deg,#059669,#10b981);
+}
+
+.red{
+    background:#991b1b;
+}
+
+.gray{
+    background:#334155;
+}
+
+input{
+    width:100%;
+    padding:14px;
+    margin-top:8px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.12);
+    background:#0f172a;
+    color:#fff;
+    outline:none;
+    font-size:15px;
+}
+
+.code{
+    text-align:center;
+    font-size:34px;
+    font-weight:900;
+    letter-spacing:8px;
+    padding:15px;
+    margin:15px 0;
+    background:#020617;
+    border-radius:15px;
+    color:#a78bfa;
+}
+
+.status{
+    text-align:center;
+    color:#94a3b8;
+    font-size:13px;
+    margin-top:12px;
+    min-height:20px;
+}
+
+.device{
+    padding:15px;
+    background:#0f172a;
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:15px;
+    margin-top:10px;
+}
+
+.device-name{
+    font-weight:800;
+    font-size:16px;
+}
+
+.device-info{
+    color:#94a3b8;
+    font-size:12px;
+    margin-top:5px;
+}
+
+.file{
+    padding:14px;
+    background:#0f172a;
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:14px;
+    margin-top:10px;
+}
+
+.file-name{
+    font-weight:700;
+    word-break:break-word;
+}
+
+.file-size{
+    color:#94a3b8;
+    font-size:12px;
+    margin-top:5px;
+}
+
+.actions{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+}
+
+.actions button,
+.actions a{
+    flex:1;
+    width:auto;
+    margin:0;
+    padding:10px;
+    border-radius:9px;
+    text-align:center;
+    text-decoration:none;
+    font-size:13px;
+}
+
+.download{
+    background:#059669;
+    color:white;
+}
+
+.delete{
+    background:#991b1b;
+    color:white;
+    border:0;
+}
+
+.empty{
+    text-align:center;
+    padding:20px;
+    color:#64748b;
+}
+
+.hidden{
+    display:none;
+}
+
+@media(max-width:480px){
+    body{padding:10px}
+    .card{padding:16px}
+    .actions{flex-direction:column}
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="card">
+
+<div class="logo">
+☁️ Remote Storage Control
+</div>
+
+<div class="subtitle">
+Control your second Android phone remotely
+</div>
+
+</div>
+
+
+<!-- PAIRING -->
+
+<div class="card">
+
+<h2>🔗 Connect Second Phone</h2>
+
+<p style="color:#94a3b8;font-size:13px">
+First create a pairing code, then enter that code
+inside the Remote Storage APK installed on your
+second phone.
+</p>
+
+<button
+class="primary"
+onclick="createPairCode()"
+>
+🔐 Generate Pairing Code
+</button>
+
+<div
+id="pairCode"
+class="code hidden"
+>
+------
+</div>
+
+<div
+id="pairStatus"
+class="status"
+>
+</div>
+
+</div>
+
+
+<!-- DEVICES -->
+
+<div class="card">
+
+<h2>📱 Connected Devices</h2>
+
+<div id="devices">
+<div class="empty">
+No device loaded
+</div>
+</div>
+
+<button
+class="gray"
+onclick="loadDevices()"
+>
+🔄 Refresh Devices
+</button>
+
+</div>
+
+
+<!-- REMOTE STORAGE -->
+
+<div
+class="card hidden"
+id="storageCard"
+>
+
+<h2>📦 Remote Storage</h2>
+
+<div
+id="storageStatus"
+class="status"
+>
+Select a connected device
+</div>
+
+<div
+id="remoteFiles"
+>
+<div class="empty">
+No files loaded
+</div>
+</div>
+
+</div>
+
+</div>
+
+
+<script>
+
+let currentPairCode = null;
+let selectedDevice = null;
+
+
+/* =========================================
+   GENERATE PAIR CODE
+========================================= */
+
+async function createPairCode(){
+
+    const output =
+        document.getElementById("pairCode");
+
+    const status =
+        document.getElementById("pairStatus");
+
+    output.classList.remove("hidden");
+
+    output.textContent = "------";
+
+    status.textContent =
+        "Creating secure pairing code...";
+
+    try{
+
+        const response =
+            await fetch(
+                "/api/remote/pair/create",
+                {
+                    method:"POST",
+                    headers:{
+                        "Content-Type":
+                            "application/json"
+                    }
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if(!response.ok){
+
+            throw new Error(
+                data.error ||
+                "Could not create pairing code"
+            );
+
+        }
+
+        currentPairCode =
+            data.code;
+
+        output.textContent =
+            data.code;
+
+        status.textContent =
+            "Enter this code in the second phone APK.";
+
+        watchPairing(data.code);
+
+    }catch(error){
+
+        status.textContent =
+            "❌ " + error.message;
+
+    }
+
+}
+
+
+/* =========================================
+   WATCH PAIRING
+========================================= */
+
+async function watchPairing(code){
+
+    const status =
+        document.getElementById("pairStatus");
+
+    for(let i=0;i<120;i++){
+
+        await sleep(2000);
+
+        try{
+
+            const response =
+                await fetch(
+                    "/api/remote/pair/status/" +
+                    encodeURIComponent(code),
+                    {
+                        cache:"no-store"
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if(data.status === "authorized"){
+
+                status.textContent =
+                    "✅ Second phone connected successfully.";
+
+                await loadDevices();
+
+                return;
+            }
+
+            if(data.status === "approved"){
+
+                status.textContent =
+                    "📱 Phone approved. Waiting for connection...";
+
+            }else{
+
+                status.textContent =
+                    "⏳ Waiting for second phone...";
+
+            }
+
+        }catch(error){
+
+            console.log(error);
+
+        }
+
+    }
+
+    status.textContent =
+        "⌛ Pairing code expired. Generate a new code.";
+
+}
+
+
+/* =========================================
+   LOAD DEVICES
+========================================= */
+
+async function loadDevices(){
+
+    const container =
+        document.getElementById("devices");
+
+    container.innerHTML =
+        '<div class="empty">Loading...</div>';
+
+    try{
+
+        const response =
+            await fetch(
+                "/api/remote/devices",
+                {
+                    cache:"no-store"
+                }
+            );
+
+        const devices =
+            await response.json();
+
+        if(
+            !Array.isArray(devices) ||
+            devices.length === 0
+        ){
+
+            container.innerHTML =
+                '<div class="empty">' +
+                '📱 No connected phone' +
+                '</div>';
+
+            return;
+        }
+
+        container.innerHTML =
+            devices.map(
+                device => {
+
+                    const name =
+                        escapeHTML(
+                            device.name ||
+                            "Android Phone"
+                        );
+
+                    const id =
+                        escapeHTML(
+                            device.id ||
+                            ""
+                        );
+
+                    return `
+
+                    <div class="device">
+
+                        <div class="device-name">
+                            📱 ${name}
+                        </div>
+
+                        <div class="device-info">
+                            Device ID: ${id}
+                        </div>
+
+                        <button
+                            class="green"
+                            onclick='selectDevice(${JSON.stringify(device.id)})'
+                        >
+                            📂 Open Storage
+                        </button>
+
+                        <button
+                            class="red"
+                            onclick='disconnectDevice(${JSON.stringify(device.id)})'
+                        >
+                            🔌 Disconnect
+                        </button>
+
+                    </div>
+
+                    `;
+
+                }
+            ).join("");
+
+    }catch(error){
+
+        container.innerHTML =
+            '<div class="empty">' +
+            '❌ Could not load devices' +
+            '</div>';
+
+    }
+
+}
+
+
+/* =========================================
+   SELECT DEVICE
+========================================= */
+
+async function selectDevice(deviceId){
+
+    selectedDevice =
+        deviceId;
+
+    document
+        .getElementById("storageCard")
+        .classList.remove("hidden");
+
+    document
+        .getElementById("storageStatus")
+        .textContent =
+        "Loading remote storage...";
+
+    await loadRemoteFiles();
+
+}
+
+
+/* =========================================
+   LOAD REMOTE FILES
+========================================= */
+
+async function loadRemoteFiles(){
+
+    const list =
+        document.getElementById("remoteFiles");
+
+    try{
+
+        const response =
+            await fetch(
+                "/api/remote/files/" +
+                encodeURIComponent(
+                    selectedDevice
+                ),
+                {
+                    cache:"no-store"
+                }
+            );
+
+        const files =
+            await response.json();
+
+        if(!response.ok){
+
+            throw new Error(
+                files.error ||
+                "Could not load storage"
+            );
+
+        }
+
+        if(
+            !Array.isArray(files) ||
+            files.length === 0
+        ){
+
+            list.innerHTML =
+                '<div class="empty">' +
+                '📭 No files found' +
+                '</div>';
+
+            return;
+        }
+
+        list.innerHTML =
+            files.map(
+                file => {
+
+                    const name =
+                        escapeHTML(
+                            file.name
+                        );
+
+                    const size =
+                        escapeHTML(
+                            file.sizeText ||
+                            formatBytes(
+                                file.size
+                            )
+                        );
+
+                    const id =
+                        JSON.stringify(
+                            file.id
+                        );
+
+                    return `
+
+                    <div class="file">
+
+                        <div class="file-name">
+                            📄 ${name}
+                        </div>
+
+                        <div class="file-size">
+                            ${size}
+                        </div>
+
+                        <div class="actions">
+
+                            <button
+                                class="download"
+                                onclick='downloadRemote(${id})'
+                            >
+                                ⬇️ Download
+                            </button>
+
+                            <button
+                                class="delete"
+                                onclick='deleteRemote(${id})'
+                            >
+                                🗑️ Delete
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                    `;
+
+                }
+            ).join("");
+
+        document
+            .getElementById("storageStatus")
+            .textContent =
+            files.length +
+            " remote item(s) found";
+
+    }catch(error){
+
+        list.innerHTML =
+            '<div class="empty">' +
+            '❌ ' +
+            escapeHTML(error.message) +
+            '</div>';
+
+    }
+
+}
+
+
+/* =========================================
+   DOWNLOAD REMOTE FILE
+========================================= */
+
+async function downloadRemote(fileId){
+
+    try{
+
+        const response =
+            await fetch(
+                "/api/remote/download",
+                {
+                    method:"POST",
+                    headers:{
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body:JSON.stringify({
+                        deviceId:
+                            selectedDevice,
+                        fileId:
+                            fileId
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if(!response.ok){
+
+            throw new Error(
+                data.error ||
+                "Download request failed"
+            );
+
+        }
+
+        alert(
+            "✅ Download request sent to second phone."
+        );
+
+    }catch(error){
+
+        alert(
+            "❌ " +
+            error.message
+        );
+
+    }
+
+}
+
+
+/* =========================================
+   DELETE REMOTE FILE
+========================================= */
+
+async function deleteRemote(fileId){
+
+    if(
+        !confirm(
+            "क्या आप इस file को दूसरे phone से delete करना चाहते हैं?"
+        )
+    ){
+
+        return;
+
+    }
+
+    try{
+
+        const response =
+            await fetch(
+                "/api/remote/delete",
+                {
+                    method:"POST",
+                    headers:{
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body:JSON.stringify({
+                        deviceId:
+                            selectedDevice,
+                        fileId:
+                            fileId
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if(!response.ok){
+
+            throw new Error(
+                data.error ||
+                "Delete request failed"
+            );
+
+        }
+
+        alert(
+            "✅ Delete command sent."
+        );
+
+        await loadRemoteFiles();
+
+    }catch(error){
+
+        alert(
+            "❌ " +
+            error.message
+        );
+
+    }
+
+}
+
+
+/* =========================================
+   DISCONNECT
+========================================= */
+
+async function disconnectDevice(deviceId){
+
+    if(
+        !confirm(
+            "Disconnect this phone?"
+        )
+    ){
+
+        return;
+
+    }
+
+    try{
+
+        const response =
+            await fetch(
+                "/api/remote/disconnect",
+                {
+                    method:"POST",
+                    headers:{
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body:JSON.stringify({
+                        deviceId:
+                            deviceId
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if(!response.ok){
+
+            throw new Error(
+                data.error ||
+                "Disconnect failed"
+            );
+
+        }
+
+        selectedDevice = null;
+
+        document
+            .getElementById("storageCard")
+            .classList.add("hidden");
+
+        await loadDevices();
+
+    }catch(error){
+
+        alert(
+            "❌ " +
+            error.message
+        );
+
+    }
+
+}
+
+
+/* =========================================
+   HELPERS
+========================================= */
+
+function sleep(ms){
+
+    return new Promise(
+        resolve =>
+            setTimeout(
+                resolve,
+                ms
+            )
+    );
+
+}
+
+
+function escapeHTML(value){
+
+    return String(value)
+        .replace(
+            /[&<>"']/g,
+            character => {
+
+                const entities = {
+
+                    "&":"&amp;",
+                    "<":"&lt;",
+                    ">":"&gt;",
+                    '"':"&quot;",
+                    "'":"&#039;"
+
+                };
+
+                return entities[
+                    character
+                ];
+
+            }
+        );
+
+}
+
+
+function formatBytes(bytes){
+
+    if(
+        !bytes ||
+        bytes === 0
+    ){
+
+        return "0 B";
+
+    }
+
+    const units =
+        ["B","KB","MB","GB","TB"];
+
+    const index =
+        Math.floor(
+            Math.log(bytes) /
+            Math.log(1024)
+        );
+
+    return (
+        (
+            bytes /
+            Math.pow(
+                1024,
+                index
+            )
+        ).toFixed(
+            index === 0 ? 0 : 2
+        )
+        +
+        " " +
+        units[index]
+    );
+
+}
+
+
+loadDevices();
+
+</script>
+
+</body>
+  </html>
