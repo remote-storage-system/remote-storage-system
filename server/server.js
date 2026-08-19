@@ -2,163 +2,715 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
+
+// Remote control routes
+const {
+    registerRemoteRoutes
+} = require("../remote.js");
 
 const app = express();
 
-const PORT = process.env.PORT || 10000;
+const PORT = Number(
+    process.env.PORT || 10000
+);
 
-// ----------------------------------------------------
+// ============================================================
 // CONFIGURATION
-// ----------------------------------------------------
+// ============================================================
 
 const API_KEY =
-    process.env.API_KEY || "CHANGE_THIS_SECRET_KEY";
+    process.env.API_KEY || "";
 
 const STORAGE_ROOT =
-    process.env.STORAGE_PATH || "/data/cloud-vault";
+    process.env.STORAGE_PATH ||
+    path.join(__dirname, "storage");
 
 const FILES_DIR =
-    path.join(STORAGE_ROOT, "files");
+    path.join(
+        STORAGE_ROOT,
+        "files"
+    );
 
 const TEMP_DIR =
-    path.join(STORAGE_ROOT, "chunks");
+    path.join(
+        STORAGE_ROOT,
+        "chunks"
+    );
 
-// ----------------------------------------------------
-// CREATE STORAGE DIRECTORIES
-// ----------------------------------------------------
+// 5 MB chunks
+const CHUNK_SIZE =
+    5 * 1024 * 1024;
 
-fs.mkdirSync(FILES_DIR, {
-    recursive: true
-});
+// Maximum single file: 20 GB
+const MAX_FILE_SIZE =
+    20 *
+    1024 *
+    1024 *
+    1024;
 
-fs.mkdirSync(TEMP_DIR, {
-    recursive: true
-});
+// ============================================================
+// CREATE DIRECTORIES
+// ============================================================
 
-// ----------------------------------------------------
+fs.mkdirSync(
+    FILES_DIR,
+    {
+        recursive: true
+    }
+);
+
+fs.mkdirSync(
+    TEMP_DIR,
+    {
+        recursive: true
+    }
+);
+
+// ============================================================
 // MIDDLEWARE
-// ----------------------------------------------------
+// ============================================================
 
-app.use(cors());
+app.disable("x-powered-by");
 
-app.use(express.json({
-    limit: "20mb"
-}));
+app.use(
+    cors({
+        origin: "*",
+        methods: [
+            "GET",
+            "POST",
+            "DELETE",
+            "OPTIONS"
+        ],
+        allowedHeaders: [
+            "Content-Type",
+            "Authorization",
+            "X-API-Key"
+        ]
+    })
+);
 
-app.use(express.urlencoded({
-    extended: true,
-    limit: "20mb"
-}));
+app.use(
+    express.json({
+        limit: "25mb"
+    })
+);
 
-// ----------------------------------------------------
-// SECURITY
-// ----------------------------------------------------
+app.use(
+    express.urlencoded({
+        extended: true,
+        limit: "25mb"
+    })
+);
 
-function authenticate(req, res, next) {
+// ============================================================
+// API AUTHENTICATION
+// ============================================================
 
-    const key =
-        req.headers["x-api-key"];
+function authenticate(
+    req,
+    res,
+    next
+) {
 
-    if (!key || key !== API_KEY) {
+    /*
+     * API_KEY must be configured in Render.
+     *
+     * Client can send:
+     *
+     * X-API-Key: your-secret
+     *
+     * OR
+     *
+     * Authorization: Bearer your-secret
+     */
+
+    if (!API_KEY) {
+
+        return res.status(503).json({
+            success: false,
+            error:
+                "Server API key is not configured"
+        });
+    }
+
+    const xApiKey =
+        String(
+            req.headers["x-api-key"] || ""
+        );
+
+    const authorization =
+        String(
+            req.headers.authorization || ""
+        );
+
+    let providedKey =
+        xApiKey;
+
+    if (
+        !providedKey &&
+        authorization.startsWith(
+            "Bearer "
+        )
+    ) {
+
+        providedKey =
+            authorization
+                .slice(7)
+                .trim();
+    }
+
+    if (
+        !providedKey ||
+        providedKey !== API_KEY
+    ) {
 
         return res.status(401).json({
             success: false,
-            error: "Unauthorized"
+            error:
+                "Unauthorized"
         });
     }
 
     next();
 }
 
-// ----------------------------------------------------
+// ============================================================
 // SAFE PATH
-// ----------------------------------------------------
+// ============================================================
 
-function safePath(relativePath) {
+function safePath(
+    relativePath
+) {
 
-    if (!relativePath) {
+    if (
+        relativePath === undefined ||
+        relativePath === null
+    ) {
+
+        throw new Error(
+            "Path required"
+        );
+    }
+
+    let input =
+        String(
+            relativePath
+        );
+
+    input =
+        input.replace(
+            /\\/g,
+            "/"
+        );
+
+    input =
+        input.replace(
+            /^\/+/,
+            ""
+        );
+
+    const normalized =
+        path.posix
+            .normalize(input);
+
+    if (
+        normalized === "." ||
+        normalized === ""
+    ) {
+
         return FILES_DIR;
     }
 
-    const normalized =
-        path.normalize(relativePath)
-            .replace(/^(\.\.(\/|\\|$))+/, "");
+    const parts =
+        normalized
+            .split("/")
+            .filter(Boolean)
+            .filter(
+                part =>
+                    part !== "." &&
+                    part !== ".."
+            );
 
-    const fullPath =
-        path.join(FILES_DIR, normalized);
+    const cleaned =
+        parts.join(
+            path.sep
+        );
 
     const root =
-        path.resolve(FILES_DIR);
+        path.resolve(
+            FILES_DIR
+        );
 
     const target =
-        path.resolve(fullPath);
+        path.resolve(
+            root,
+            cleaned
+        );
 
     if (
         target !== root &&
-        !target.startsWith(root + path.sep)
+        !target.startsWith(
+            root + path.sep
+        )
     ) {
-        throw new Error("Invalid path");
+
+        throw new Error(
+            "Invalid path"
+        );
     }
 
     return target;
 }
 
-// ----------------------------------------------------
-// HEALTH CHECK
-// ----------------------------------------------------
+// ============================================================
+// RELATIVE PATH
+// ============================================================
 
-app.get("/", (req, res) => {
+function relativeStoragePath(
+    fullPath
+) {
 
-    res.json({
-        success: true,
-        service: "Cloud Vault Pro",
-        status: "online",
-        version: "1.0.0"
-    });
-});
+    return path
+        .relative(
+            FILES_DIR,
+            fullPath
+        )
+        .replace(
+            /\\/g,
+            "/"
+        );
+}
 
-// ----------------------------------------------------
-// SERVER STATUS
-// ----------------------------------------------------
+// ============================================================
+// HEALTH PAGE
+// ============================================================
 
 app.get(
-    "/api/status",
-    authenticate,
+    "/",
     (req, res) => {
 
-        res.json({
-            success: true,
-            status: "online",
-            storage: STORAGE_ROOT,
-            timestamp: new Date().toISOString()
-        });
+        res.status(200).send(`
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>Cloud Vault Pro</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 20px;
+
+    background:
+        radial-gradient(
+            circle at top,
+            #172554,
+            #020617 60%
+        );
+
+    color: white;
+
+    font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+}
+
+.card {
+    width: 100%;
+    max-width: 620px;
+
+    padding: 30px;
+
+    border-radius: 28px;
+
+    background:
+        rgba(
+            15,
+            23,
+            42,
+            0.92
+        );
+
+    border:
+        1px solid
+        rgba(
+            148,
+            163,
+            184,
+            0.2
+        );
+
+    box-shadow:
+        0 25px 80px
+        rgba(
+            0,
+            0,
+            0,
+            0.45
+        );
+}
+
+.logo {
+    font-size: 48px;
+}
+
+h1 {
+    margin: 8px 0;
+}
+
+.status {
+    display: inline-block;
+
+    margin-top: 12px;
+    padding: 8px 14px;
+
+    border-radius: 999px;
+
+    background: #052e16;
+    color: #4ade80;
+
+    font-weight: 700;
+}
+
+.info {
+    margin-top: 25px;
+
+    line-height: 1.8;
+
+    color: #cbd5e1;
+}
+
+.endpoint {
+    margin-top: 20px;
+
+    padding: 15px;
+
+    border-radius: 15px;
+
+    background: #020617;
+
+    font-family: monospace;
+
+    word-break: break-all;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card">
+
+<div class="logo">☁️</div>
+
+<h1>Cloud Vault Pro</h1>
+
+<div class="status">
+● SERVER ONLINE
+</div>
+
+<div class="info">
+
+<p>
+Your Cloud Vault server is running successfully.
+</p>
+
+<p>
+The server is ready for the storage controller
+and Android device connection.
+</p>
+
+</div>
+
+<div class="endpoint">
+GET /api/health
+</div>
+
+</div>
+
+</body>
+
+</html>
+        `);
+
     }
 );
 
-// ----------------------------------------------------
-// LIST FILES AND FOLDERS
-// ----------------------------------------------------
+// ============================================================
+// HEALTH API
+// ============================================================
+
+app.get(
+    "/api/health",
+    (req, res) => {
+
+        res.json({
+
+            success: true,
+
+            service:
+                "Cloud Vault Pro",
+
+            status:
+                "online",
+
+            version:
+                "2.0.0",
+
+            timestamp:
+                new Date().toISOString()
+
+        });
+
+    }
+);
+
+// ============================================================
+// AUTHENTICATED API
+// ============================================================
+
+app.use(
+    "/api",
+    authenticate
+);
+
+// ============================================================
+// SERVER STATUS
+// ============================================================
+
+app.get(
+    "/api/status",
+    (req, res) => {
+
+        res.json({
+
+            success: true,
+
+            status:
+                "online",
+
+            storage:
+                STORAGE_ROOT,
+
+            filesDirectory:
+                FILES_DIR,
+
+            timestamp:
+                new Date().toISOString()
+
+        });
+
+    }
+);
+
+// ============================================================
+// STORAGE INFORMATION
+// ============================================================
+
+async function calculateStorage(
+    directory
+) {
+
+    let total = 0;
+
+    async function scan(
+        current
+    ) {
+
+        let entries = [];
+
+        try {
+
+            entries =
+                await fs.promises.readdir(
+                    current,
+                    {
+                        withFileTypes: true
+                    }
+                );
+
+        } catch {
+
+            return;
+        }
+
+        for (
+            const entry of entries
+        ) {
+
+            const full =
+                path.join(
+                    current,
+                    entry.name
+                );
+
+            if (
+                entry.isDirectory()
+            ) {
+
+                await scan(
+                    full
+                );
+
+            } else {
+
+                try {
+
+                    const stat =
+                        await fs.promises.stat(
+                            full
+                        );
+
+                    total +=
+                        stat.size;
+
+                } catch {}
+
+            }
+
+        }
+
+    }
+
+    await scan(
+        directory
+    );
+
+    return total;
+}
+
+app.get(
+    "/api/storage",
+    async (req, res) => {
+
+        try {
+
+            const used =
+                await calculateStorage(
+                    FILES_DIR
+                );
+
+            res.json({
+
+                success:
+                    true,
+
+                used,
+
+                usedMB:
+                    (
+                        used /
+                        1024 /
+                        1024
+                    ).toFixed(2),
+
+                usedGB:
+                    (
+                        used /
+                        1024 /
+                        1024 /
+                        1024
+                    ).toFixed(3)
+
+            });
+
+        } catch (error) {
+
+            res.status(500).json({
+
+                success:
+                    false,
+
+                error:
+                    error.message
+
+            });
+
+        }
+
+    }
+);
+
+// ============================================================
+// LIST FILES / FOLDERS
+// ============================================================
 
 app.get(
     "/api/files",
-    authenticate,
     async (req, res) => {
 
         try {
 
             const requestedPath =
-                req.query.path || "";
+                String(
+                    req.query.path || ""
+                );
 
             const directory =
-                safePath(requestedPath);
+                safePath(
+                    requestedPath
+                );
 
-            if (!fs.existsSync(directory)) {
+            if (
+                !fs.existsSync(
+                    directory
+                )
+            ) {
 
                 return res.status(404).json({
-                    success: false,
-                    error: "Folder not found"
+
+                    success:
+                        false,
+
+                    error:
+                        "Folder not found"
+
                 });
+
+            }
+
+            const stat =
+                await fs.promises.stat(
+                    directory
+                );
+
+            if (
+                !stat.isDirectory()
+            ) {
+
+                return res.status(400).json({
+
+                    success:
+                        false,
+
+                    error:
+                        "Path is not a folder"
+
+                });
+
             }
 
             const entries =
@@ -171,16 +723,9 @@ app.get(
 
             const result = [];
 
-            for (const entry of entries) {
-
-                const relativePath =
-                    path.relative(
-                        FILES_DIR,
-                        path.join(
-                            directory,
-                            entry.name
-                        )
-                    );
+            for (
+                const entry of entries
+            ) {
 
                 const fullPath =
                     path.join(
@@ -193,144 +738,236 @@ app.get(
 
                 try {
 
-                    const stats =
+                    const info =
                         await fs.promises.stat(
                             fullPath
                         );
 
-                    size =
-                        entry.isFile()
-                            ? stats.size
-                            : 0;
+                    if (
+                        info.isFile()
+                    ) {
+
+                        size =
+                            info.size;
+
+                    }
 
                     modified =
-                        stats.mtime.toISOString();
+                        info.mtime.toISOString();
 
-                } catch (_) {}
+                } catch {}
 
                 result.push({
-                    name: entry.name,
-                    type: entry.isDirectory()
-                        ? "folder"
-                        : "file",
+
+                    name:
+                        entry.name,
+
+                    type:
+                        entry.isDirectory()
+                            ? "folder"
+                            : "file",
+
                     size,
+
                     modified,
-                    path: relativePath
+
+                    path:
+                        relativeStoragePath(
+                            fullPath
+                        )
+
                 });
+
             }
 
-            result.sort((a, b) => {
+            result.sort(
+                (
+                    a,
+                    b
+                ) => {
 
-                if (a.type !== b.type) {
-                    return a.type === "folder"
-                        ? -1
-                        : 1;
+                    if (
+                        a.type !==
+                        b.type
+                    ) {
+
+                        return (
+                            a.type ===
+                            "folder"
+                        )
+                            ? -1
+                            : 1;
+                    }
+
+                    return a.name.localeCompare(
+                        b.name
+                    );
+
                 }
-
-                return a.name.localeCompare(
-                    b.name
-                );
-            });
+            );
 
             res.json({
-                success: true,
-                path: requestedPath,
-                items: result
+
+                success:
+                    true,
+
+                path:
+                    requestedPath,
+
+                items:
+                    result
+
             });
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "List error:",
+                error
+            );
 
             res.status(500).json({
-                success: false,
-                error: error.message
+
+                success:
+                    false,
+
+                error:
+                    error.message
+
             });
+
         }
+
     }
 );
 
-// ----------------------------------------------------
+// ============================================================
 // CREATE FOLDER
-// ----------------------------------------------------
+// ============================================================
 
 app.post(
     "/api/folder",
-    authenticate,
     async (req, res) => {
 
         try {
 
             const folderPath =
-                req.body.path;
+                String(
+                    req.body?.path || ""
+                );
 
             if (!folderPath) {
 
                 return res.status(400).json({
-                    success: false,
-                    error: "Folder path required"
+
+                    success:
+                        false,
+
+                    error:
+                        "Folder path required"
+
                 });
+
             }
 
             const directory =
-                safePath(folderPath);
+                safePath(
+                    folderPath
+                );
 
             await fs.promises.mkdir(
                 directory,
                 {
-                    recursive: true
+                    recursive:
+                        true
                 }
             );
 
             res.json({
-                success: true,
-                message: "Folder created",
-                path: folderPath
+
+                success:
+                    true,
+
+                message:
+                    "Folder created",
+
+                path:
+                    folderPath
+
             });
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Folder error:",
+                error
+            );
 
             res.status(500).json({
-                success: false,
-                error: error.message
+
+                success:
+                    false,
+
+                error:
+                    error.message
+
             });
+
         }
+
     }
 );
 
-// ----------------------------------------------------
+// ============================================================
 // DOWNLOAD FILE
-// ----------------------------------------------------
+// ============================================================
 
 app.get(
     "/api/download",
-    authenticate,
     async (req, res) => {
 
         try {
 
             const filePath =
-                req.query.path;
+                String(
+                    req.query.path || ""
+                );
 
             if (!filePath) {
 
                 return res.status(400).json({
-                    success: false,
-                    error: "File path required"
+
+                    success:
+                        false,
+
+                    error:
+                        "File path required"
+
                 });
+
             }
 
             const fullPath =
-                safePath(filePath);
+                safePath(
+                    filePath
+                );
 
-            if (!fs.existsSync(fullPath)) {
+            if (
+                !fs.existsSync(
+                    fullPath
+                )
+            ) {
 
                 return res.status(404).json({
-                    success: false,
-                    error: "File not found"
+
+                    success:
+                        false,
+
+                    error:
+                        "File not found"
+
                 });
+
             }
 
             const stats =
@@ -338,114 +975,331 @@ app.get(
                     fullPath
                 );
 
-            if (!stats.isFile()) {
+            if (
+                !stats.isFile()
+            ) {
 
                 return res.status(400).json({
-                    success: false,
-                    error: "Not a file"
+
+                    success:
+                        false,
+
+                    error:
+                        "Not a file"
+
                 });
+
             }
+
+            res.setHeader(
+                "Content-Length",
+                stats.size
+            );
+
+            res.setHeader(
+                "Cache-Control",
+                "no-cache"
+            );
 
             res.download(
                 fullPath,
-                path.basename(fullPath)
+                path.basename(
+                    fullPath
+                )
             );
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Download error:",
+                error
+            );
 
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
+            if (
+                !res.headersSent
+            ) {
+
+                res.status(500).json({
+
+                    success:
+                        false,
+
+                    error:
+                        error.message
+
+                });
+
+            }
+
         }
+
     }
 );
 
-// ----------------------------------------------------
+// ============================================================
 // DELETE FILE OR FOLDER
-// ----------------------------------------------------
+// ============================================================
 
 app.delete(
     "/api/files",
-    authenticate,
     async (req, res) => {
 
         try {
 
             const targetPath =
-                req.body.path ||
-                req.query.path;
+                String(
+                    req.body?.path ||
+                    req.query.path ||
+                    ""
+                );
 
             if (!targetPath) {
 
                 return res.status(400).json({
-                    success: false,
-                    error: "Path required"
+
+                    success:
+                        false,
+
+                    error:
+                        "Path required"
+
                 });
+
             }
 
             const fullPath =
-                safePath(targetPath);
+                safePath(
+                    targetPath
+                );
 
-            if (!fs.existsSync(fullPath)) {
+            const root =
+                path.resolve(
+                    FILES_DIR
+                );
 
-                return res.status(404).json({
-                    success: false,
-                    error: "File or folder not found"
-                });
-            }
-
-            const resolvedRoot =
-                path.resolve(FILES_DIR);
-
-            const resolvedTarget =
-                path.resolve(fullPath);
+            const target =
+                path.resolve(
+                    fullPath
+                );
 
             if (
-                resolvedTarget === resolvedRoot
+                target === root
             ) {
 
                 return res.status(403).json({
-                    success: false,
-                    error: "Root storage cannot be deleted"
+
+                    success:
+                        false,
+
+                    error:
+                        "Root storage cannot be deleted"
+
                 });
+
+            }
+
+            if (
+                !fs.existsSync(
+                    fullPath
+                )
+            ) {
+
+                return res.status(404).json({
+
+                    success:
+                        false,
+
+                    error:
+                        "File or folder not found"
+
+                });
+
             }
 
             await fs.promises.rm(
                 fullPath,
                 {
-                    recursive: true,
-                    force: true
+                    recursive:
+                        true,
+                    force:
+                        true
                 }
             );
 
             res.json({
-                success: true,
-                message: "Deleted successfully",
-                path: targetPath
+
+                success:
+                    true,
+
+                message:
+                    "Deleted successfully",
+
+                path:
+                    targetPath
+
             });
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Delete error:",
+                error
+            );
 
             res.status(500).json({
-                success: false,
-                error: error.message
+
+                success:
+                    false,
+
+                error:
+                    error.message
+
             });
+
         }
+
     }
 );
 
-// ----------------------------------------------------
+// ============================================================
+// RENAME FILE / FOLDER
+// ============================================================
+
+app.post(
+    "/api/rename",
+    async (req, res) => {
+
+        try {
+
+            const oldPath =
+                String(
+                    req.body?.oldPath ||
+                    ""
+                );
+
+            const newPath =
+                String(
+                    req.body?.newPath ||
+                    ""
+                );
+
+            if (
+                !oldPath ||
+                !newPath
+            ) {
+
+                return res.status(400).json({
+
+                    success:
+                        false,
+
+                    error:
+                        "oldPath and newPath required"
+
+                });
+
+            }
+
+            const oldFull =
+                safePath(
+                    oldPath
+                );
+
+            const newFull =
+                safePath(
+                    newPath
+                );
+
+            if (
+                !fs.existsSync(
+                    oldFull
+                )
+            ) {
+
+                return res.status(404).json({
+
+                    success:
+                        false,
+
+                    error:
+                        "Original path not found"
+
+                });
+
+            }
+
+            if (
+                fs.existsSync(
+                    newFull
+                )
+            ) {
+
+                return res.status(409).json({
+
+                    success:
+                        false,
+
+                    error:
+                        "Destination already exists"
+
+                });
+
+            }
+
+            await fs.promises.mkdir(
+                path.dirname(
+                    newFull
+                ),
+                {
+                    recursive:
+                        true
+                }
+            );
+
+            await fs.promises.rename(
+                oldFull,
+                newFull
+            );
+
+            res.json({
+
+                success:
+                    true,
+
+                oldPath,
+
+                newPath
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Rename error:",
+                error
+            );
+
+            res.status(500).json({
+
+                success:
+                    false,
+
+                error:
+                    error.message
+
+            });
+
+        }
+
+    }
+);
+
+// ============================================================
 // CHUNK UPLOAD
-// ----------------------------------------------------
+// ============================================================
 
 app.post(
     "/api/upload/chunk",
-    authenticate,
     async (req, res) => {
 
         try {
@@ -457,57 +1311,181 @@ app.post(
                 chunkIndex,
                 totalChunks,
                 data
-            } = req.body;
+            } = req.body || {};
 
             if (
                 !uploadId ||
                 !fileName ||
-                !data ||
+                data === undefined ||
                 chunkIndex === undefined ||
                 !totalChunks
             ) {
 
                 return res.status(400).json({
-                    success: false,
-                    error: "Missing upload information"
+
+                    success:
+                        false,
+
+                    error:
+                        "Missing upload information"
+
                 });
+
             }
 
             if (
-                !/^[a-zA-Z0-9_-]+$/.test(
-                    uploadId
-                )
+                !/^[a-zA-Z0-9_-]{8,100}$/
+                    .test(
+                        String(
+                            uploadId
+                        )
+                    )
             ) {
 
                 return res.status(400).json({
-                    success: false,
-                    error: "Invalid upload ID"
+
+                    success:
+                        false,
+
+                    error:
+                        "Invalid upload ID"
+
                 });
+
+            }
+
+            const index =
+                Number(
+                    chunkIndex
+                );
+
+            const total =
+                Number(
+                    totalChunks
+                );
+
+            if (
+                !Number.isInteger(index) ||
+                !Number.isInteger(total) ||
+                index < 0 ||
+                index >= total
+            ) {
+
+                return res.status(400).json({
+
+                    success:
+                        false,
+
+                    error:
+                        "Invalid chunk information"
+
+                });
+
+            }
+
+            const buffer =
+                Buffer.from(
+                    String(data),
+                    "base64"
+                );
+
+            if (
+                buffer.length >
+                CHUNK_SIZE + 1024
+            ) {
+
+                return res.status(413).json({
+
+                    success:
+                        false,
+
+                    error:
+                        "Chunk is too large"
+
+                });
+
             }
 
             const uploadDirectory =
                 path.join(
                     TEMP_DIR,
-                    uploadId
+                    String(
+                        uploadId
+                    )
                 );
 
             await fs.promises.mkdir(
                 uploadDirectory,
                 {
-                    recursive: true
+                    recursive:
+                        true
                 }
+            );
+
+            const metadataPath =
+                path.join(
+                    uploadDirectory,
+                    "metadata.json"
+                );
+
+            let metadata = {
+
+                uploadId:
+                    String(
+                        uploadId
+                    ),
+
+                fileName:
+                    String(
+                        fileName
+                    ),
+
+                relativePath:
+                    String(
+                        relativePath || ""
+                    ),
+
+                totalChunks:
+                    total,
+
+                createdAt:
+                    Date.now()
+
+            };
+
+            if (
+                fs.existsSync(
+                    metadataPath
+                )
+            ) {
+
+                try {
+
+                    metadata =
+                        JSON.parse(
+                            await fs.promises.readFile(
+                                metadataPath,
+                                "utf8"
+                            )
+                        );
+
+                } catch {}
+
+            }
+
+            await fs.promises.writeFile(
+                metadataPath,
+                JSON.stringify(
+                    metadata,
+                    null,
+                    2
+                )
             );
 
             const chunkFile =
                 path.join(
                     uploadDirectory,
-                    `${chunkIndex}.chunk`
-                );
-
-            const buffer =
-                Buffer.from(
-                    data,
-                    "base64"
+                    `${index}.chunk`
                 );
 
             await fs.promises.writeFile(
@@ -516,32 +1494,54 @@ app.post(
             );
 
             res.json({
-                success: true,
+
+                success:
+                    true,
+
                 uploadId,
-                chunkIndex,
-                totalChunks,
-                message: "Chunk uploaded"
+
+                chunkIndex:
+                    index,
+
+                totalChunks:
+                    total,
+
+                bytes:
+                    buffer.length,
+
+                message:
+                    "Chunk uploaded"
+
             });
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Chunk upload error:",
+                error
+            );
 
             res.status(500).json({
-                success: false,
-                error: error.message
+
+                success:
+                    false,
+
+                error:
+                    error.message
+
             });
+
         }
+
     }
 );
 
-// ----------------------------------------------------
-// COMPLETE CHUNK UPLOAD
-// ----------------------------------------------------
+// ============================================================
+// COMPLETE UPLOAD
+// ============================================================
 
 app.post(
     "/api/upload/complete",
-    authenticate,
     async (req, res) => {
 
         try {
@@ -551,7 +1551,7 @@ app.post(
                 fileName,
                 relativePath,
                 totalChunks
-            } = req.body;
+            } = req.body || {};
 
             if (
                 !uploadId ||
@@ -560,15 +1560,66 @@ app.post(
             ) {
 
                 return res.status(400).json({
-                    success: false,
-                    error: "Missing upload information"
+
+                    success:
+                        false,
+
+                    error:
+                        "Missing upload information"
+
                 });
+
+            }
+
+            if (
+                !/^[a-zA-Z0-9_-]{8,100}$/
+                    .test(
+                        String(
+                            uploadId
+                        )
+                    )
+            ) {
+
+                return res.status(400).json({
+
+                    success:
+                        false,
+
+                    error:
+                        "Invalid upload ID"
+
+                });
+
+            }
+
+            const total =
+                Number(
+                    totalChunks
+                );
+
+            if (
+                !Number.isInteger(total) ||
+                total < 1
+            ) {
+
+                return res.status(400).json({
+
+                    success:
+                        false,
+
+                    error:
+                        "Invalid totalChunks"
+
+                });
+
             }
 
             const uploadDirectory =
                 path.join(
                     TEMP_DIR,
-                    uploadId
+                    String(
+                        uploadId
+                    )
                 );
 
             if (
@@ -578,18 +1629,44 @@ app.post(
             ) {
 
                 return res.status(404).json({
-                    success: false,
-                    error: "Upload session not found"
+
+                    success:
+                        false,
+
+                    error:
+                        "Upload session not found"
+
                 });
+
             }
 
-            const finalRelativePath =
-                relativePath
-                    ? path.join(
-                        relativePath,
+            const cleanFileName =
+                path.basename(
+                    String(
                         fileName
                     )
-                    : fileName;
+                );
+
+            const relativeDirectory =
+                String(
+                    relativePath || ""
+                )
+                    .replace(
+                        /\\/g,
+                        "/"
+                    )
+                    .replace(
+                        /^\/+/,
+                        ""
+                    );
+
+            const finalRelativePath =
+                relativeDirectory
+                    ? path.posix.join(
+                        relativeDirectory,
+                        cleanFileName
+                    )
+                    : cleanFileName;
 
             const finalPath =
                 safePath(
@@ -597,22 +1674,63 @@ app.post(
                 );
 
             await fs.promises.mkdir(
-                path.dirname(finalPath),
+                path.dirname(
+                    finalPath
+                ),
                 {
-                    recursive: true
+                    recursive:
+                        true
                 }
             );
 
+            // ------------------------------------------------
+            // If same filename exists, create unique name
+            // ------------------------------------------------
+
+            let targetPath =
+                finalPath;
+
+            if (
+                fs.existsSync(
+                    targetPath
+                )
+            ) {
+
+                const extension =
+                    path.extname(
+                        targetPath
+                    );
+
+                const base =
+                    path.basename(
+                        targetPath,
+                        extension
+                    );
+
+                targetPath =
+                    path.join(
+                        path.dirname(
+                            targetPath
+                        ),
+                        `${base}-${Date.now()}${extension}`
+                    );
+
+            }
+
+            // ------------------------------------------------
+            // Create final file
+            // ------------------------------------------------
+
             const output =
                 fs.createWriteStream(
-                    finalPath
+                    targetPath
                 );
 
             try {
 
                 for (
                     let i = 0;
-                    i < Number(totalChunks);
+                    i < total;
                     i++
                 ) {
 
@@ -630,11 +1748,24 @@ app.post(
 
                         output.destroy();
 
+                        try {
+
+                            await fs.promises.unlink(
+                                targetPath
+                            );
+
+                        } catch {}
+
                         return res.status(400).json({
-                            success: false,
+
+                            success:
+                                false,
+
                             error:
                                 `Missing chunk ${i}`
+
                         });
+
                     }
 
                     const chunk =
@@ -643,26 +1774,63 @@ app.post(
                         );
 
                     await new Promise(
-                        (resolve, reject) => {
+                        (
+                            resolve,
+                            reject
+                        ) => {
 
                             output.write(
                                 chunk,
                                 error => {
 
-                                    if (error) {
-                                        reject(error);
+                                    if (
+                                        error
+                                    ) {
+
+                                        reject(
+                                            error
+                                        );
+
                                     } else {
+
                                         resolve();
+
                                     }
+
                                 }
                             );
+
                         }
                     );
+
                 }
 
                 await new Promise(
-                    resolve => {
-                        output.end(resolve);
+                    (
+                        resolve,
+                        reject
+                    ) => {
+
+                        output.end(
+                            error => {
+
+                                if (
+                                    error
+                                ) {
+
+                                    reject(
+                                        error
+                                    );
+
+                                } else {
+
+                                    resolve();
+
+                                }
+
+                            }
+                        );
+
                     }
                 );
 
@@ -670,59 +1838,116 @@ app.post(
 
                 output.destroy();
 
+                try {
+
+                    await fs.promises.unlink(
+                        targetPath
+                    );
+
+                } catch {}
+
                 throw error;
             }
+
+            // ------------------------------------------------
+            // Remove temporary chunks
+            // ------------------------------------------------
 
             await fs.promises.rm(
                 uploadDirectory,
                 {
-                    recursive: true,
-                    force: true
+                    recursive:
+                        true,
+                    force:
+                        true
                 }
             );
 
+            const finalStats =
+                await fs.promises.stat(
+                    targetPath
+                );
+
+            const savedPath =
+                relativeStoragePath(
+                    targetPath
+                );
+
+            console.log(
+                "UPLOAD COMPLETE:",
+                savedPath
+            );
+
             res.json({
-                success: true,
-                message: "File uploaded successfully",
-                path: finalRelativePath
+
+                success:
+                    true,
+
+                message:
+                    "File uploaded successfully",
+
+                path:
+                    savedPath,
+
+                size:
+                    finalStats.size
+
             });
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Complete upload error:",
+                error
+            );
 
             res.status(500).json({
-                success: false,
-                error: error.message
+
+                success:
+                    false,
+
+                error:
+                    error.message
+
             });
+
         }
+
     }
 );
 
-// ----------------------------------------------------
+// ============================================================
 // CANCEL UPLOAD
-// ----------------------------------------------------
+// ============================================================
 
 app.delete(
     "/api/upload/:uploadId",
-    authenticate,
     async (req, res) => {
 
         try {
 
             const uploadId =
-                req.params.uploadId;
+                String(
+                    req.params.uploadId || ""
+                );
 
             if (
-                !/^[a-zA-Z0-9_-]+$/.test(
-                    uploadId
-                )
+                !/^[a-zA-Z0-9_-]{8,100}$/
+                    .test(
+                        uploadId
+                    )
             ) {
 
                 return res.status(400).json({
-                    success: false,
-                    error: "Invalid upload ID"
+
+                    success:
+                        false,
+
+                    error:
+                        "Invalid upload ID"
+
                 });
+
             }
 
             const uploadDirectory =
@@ -734,50 +1959,105 @@ app.delete(
             await fs.promises.rm(
                 uploadDirectory,
                 {
-                    recursive: true,
-                    force: true
+                    recursive:
+                        true,
+                    force:
+                        true
                 }
             );
 
             res.json({
-                success: true,
-                message: "Upload cancelled"
+
+                success:
+                    true,
+
+                message:
+                    "Upload cancelled"
+
             });
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Cancel upload error:",
+                error
+            );
 
             res.status(500).json({
-                success: false,
-                error: error.message
+
+                success:
+                    false,
+
+                error:
+                    error.message
+
             });
+
         }
+
     }
 );
 
-// ----------------------------------------------------
+// ============================================================
+// REMOTE DEVICE ROUTES
+// ============================================================
+//
+// IMPORTANT:
+// These routes are registered AFTER:
+//
+// app.use("/api", authenticate);
+//
+// Therefore remote control APIs also require API_KEY.
+//
+// ============================================================
+
+registerRemoteRoutes(
+    app
+);
+
+// ============================================================
 // GLOBAL ERROR HANDLER
-// ----------------------------------------------------
+// ============================================================
 
 app.use(
-    (error, req, res, next) => {
+    (
+        error,
+        req,
+        res,
+        next
+    ) => {
 
         console.error(
-            "Server error:",
+            "GLOBAL ERROR:",
             error
         );
 
+        if (
+            res.headersSent
+        ) {
+
+            return next(
+                error
+            );
+
+        }
+
         res.status(500).json({
-            success: false,
-            error: "Internal server error"
+
+            success:
+                false,
+
+            error:
+                "Internal server error"
+
         });
+
     }
 );
 
-// ----------------------------------------------------
+// ============================================================
 // START SERVER
-// ----------------------------------------------------
+// ============================================================
 
 app.listen(
     PORT,
@@ -785,11 +2065,57 @@ app.listen(
     () => {
 
         console.log(
-            `Cloud Vault Pro running on port ${PORT}`
+            "======================================"
         );
 
         console.log(
-            `Storage directory: ${FILES_DIR}`
+            "☁️ CLOUD VAULT PRO SERVER"
         );
+
+        console.log(
+            "======================================"
+        );
+
+        console.log(
+            "Port:",
+            PORT
+        );
+
+        console.log(
+            "Storage:",
+            STORAGE_ROOT
+        );
+
+        console.log(
+            "Files:",
+            FILES_DIR
+        );
+
+        console.log(
+            "Chunks:",
+            TEMP_DIR
+        );
+
+        console.log(
+            "Chunk size:",
+            "5 MB"
+        );
+
+        console.log(
+            "Maximum file:",
+            "20 GB"
+        );
+
+        console.log(
+            "API authentication:",
+            API_KEY
+                ? "ENABLED"
+                : "NOT CONFIGURED"
+        );
+
+        console.log(
+            "======================================"
+        );
+
     }
 );
