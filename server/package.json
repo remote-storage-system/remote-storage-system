@@ -1,8 +1,7 @@
 {
-  "name": "remote-storage-server",
+  "name": "cloud-vault-server",
   "version": "1.0.0",
-  "private": true,
-  "description": "Private remote storage server",
+  "description": "Private remote storage server for Cloud Vault",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -11,7 +10,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "fs-extra": "^11.3.0"
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
   }
 }
