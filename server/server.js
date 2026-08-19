@@ -1,738 +1,186 @@
 const express = require("express");
+const cors = require("cors");
 const fs = require("fs");
-const fsp = fs.promises;
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 
-const PORT = Number(process.env.PORT || 10000);
+const PORT = process.env.PORT || 10000;
 
-/*
-========================================================
-REMOTE STORAGE SERVER
-========================================================
-
-Storage APK
-    ↓
-    uploads files/chunks
-    ↓
-SERVER
-    ↓
-Controller APK
-    ↓
-    list / download / delete / rename
-
-IMPORTANT:
-Set VAULT_TOKEN in Render Environment Variables.
-Example:
-
-VAULT_TOKEN=your-long-random-secret-token
-
-Do NOT put the real token inside this source code.
-========================================================
-*/
-
-
-// ======================================================
+// ----------------------------------------------------
 // CONFIGURATION
-// ======================================================
+// ----------------------------------------------------
 
-const STORAGE_DIR =
-    process.env.STORAGE_DIR ||
-    path.join(__dirname, "storage");
+const API_KEY =
+    process.env.API_KEY || "CHANGE_THIS_SECRET_KEY";
+
+const STORAGE_ROOT =
+    process.env.STORAGE_PATH || "/data/cloud-vault";
+
+const FILES_DIR =
+    path.join(STORAGE_ROOT, "files");
 
 const TEMP_DIR =
-    path.join(
-        STORAGE_DIR,
-        ".uploading"
-    );
+    path.join(STORAGE_ROOT, "chunks");
 
-const CHUNK_SIZE =
-    5 * 1024 * 1024; // 5 MB
+// ----------------------------------------------------
+// CREATE STORAGE DIRECTORIES
+// ----------------------------------------------------
 
-const MAX_FILE_SIZE =
-    20 *
-    1024 *
-    1024 *
-    1024; // 20 GB
+fs.mkdirSync(FILES_DIR, {
+    recursive: true
+});
 
-const MAX_STORAGE =
-    Number(
-        process.env.MAX_STORAGE_BYTES ||
-        (
-            50 *
-            1024 *
-            1024 *
-            1024
-        )
-    );
+fs.mkdirSync(TEMP_DIR, {
+    recursive: true
+});
 
-const VAULT_TOKEN =
-    process.env.VAULT_TOKEN ||
-    "";
+// ----------------------------------------------------
+// MIDDLEWARE
+// ----------------------------------------------------
 
+app.use(cors());
 
-// ======================================================
-// CREATE DIRECTORIES
-// ======================================================
+app.use(express.json({
+    limit: "20mb"
+}));
 
-async function createDirectories() {
+app.use(express.urlencoded({
+    extended: true,
+    limit: "20mb"
+}));
 
-    await fsp.mkdir(
-        STORAGE_DIR,
-        {
-            recursive: true
-        }
-    );
+// ----------------------------------------------------
+// SECURITY
+// ----------------------------------------------------
 
-    await fsp.mkdir(
-        TEMP_DIR,
-        {
-            recursive: true
-        }
-    );
-}
+function authenticate(req, res, next) {
 
+    const key =
+        req.headers["x-api-key"];
 
-// ======================================================
-// AUTHENTICATION
-// ======================================================
+    if (!key || key !== API_KEY) {
 
-function authenticate(
-    req,
-    res,
-    next
-) {
-
-    /*
-    During local testing, if VAULT_TOKEN
-    is not configured, authentication is disabled.
-
-    On Render ALWAYS configure VAULT_TOKEN.
-    */
-
-    if (!VAULT_TOKEN) {
-
-        return next();
-
-    }
-
-    const header =
-        String(
-            req.headers.authorization ||
-            ""
-        );
-
-    const prefix =
-        "Bearer ";
-
-    if (
-        !header.startsWith(prefix)
-    ) {
-
-        return res
-            .status(401)
-            .json({
-                error:
-                    "Authentication required"
-            });
-
-    }
-
-    const token =
-        header
-            .slice(prefix.length)
-            .trim();
-
-    if (
-        token !==
-        VAULT_TOKEN
-    ) {
-
-        return res
-            .status(403)
-            .json({
-                error:
-                    "Invalid authentication token"
-            });
-
+        return res.status(401).json({
+            success: false,
+            error: "Unauthorized"
+        });
     }
 
     next();
 }
 
-
-// ======================================================
+// ----------------------------------------------------
 // SAFE PATH
-// ======================================================
+// ----------------------------------------------------
 
-function cleanPath(
-    value
-) {
+function safePath(relativePath) {
 
-    return String(
-        value || ""
-    )
-        .replace(
-            /\\/g,
-            "/"
-        )
-        .split("/")
-        .filter(
-            part =>
-                part &&
-                part !== "." &&
-                part !== ".."
-        )
-        .map(
-            part =>
-                part.replace(
-                    /[<>:"|?*\x00-\x1F]/g,
-                    "_"
-                )
-        )
-        .join("/");
-}
-
-
-// ======================================================
-// SAFE STORAGE PATH
-// ======================================================
-
-function resolveStoragePath(
-    relativePath
-) {
-
-    const clean =
-        cleanPath(
-            relativePath
-        );
-
-    if (!clean) {
-
-        throw new Error(
-            "Invalid path"
-        );
-
+    if (!relativePath) {
+        return FILES_DIR;
     }
+
+    const normalized =
+        path.normalize(relativePath)
+            .replace(/^(\.\.(\/|\\|$))+/, "");
+
+    const fullPath =
+        path.join(FILES_DIR, normalized);
 
     const root =
-        path.resolve(
-            STORAGE_DIR
-        );
+        path.resolve(FILES_DIR);
 
-    const full =
-        path.resolve(
-            root,
-            clean
-        );
+    const target =
+        path.resolve(fullPath);
 
     if (
-        full !== root &&
-        !full.startsWith(
-            root + path.sep
-        )
+        target !== root &&
+        !target.startsWith(root + path.sep)
     ) {
-
-        throw new Error(
-            "Invalid path"
-        );
-
+        throw new Error("Invalid path");
     }
 
-    return full;
+    return target;
 }
 
+// ----------------------------------------------------
+// HEALTH CHECK
+// ----------------------------------------------------
 
-// ======================================================
-// FORMAT BYTES
-// ======================================================
+app.get("/", (req, res) => {
 
-function formatBytes(
-    bytes
-) {
+    res.json({
+        success: true,
+        service: "Cloud Vault Pro",
+        status: "online",
+        version: "1.0.0"
+    });
+});
 
-    if (
-        !Number.isFinite(bytes) ||
-        bytes <= 0
-    ) {
+// ----------------------------------------------------
+// SERVER STATUS
+// ----------------------------------------------------
 
-        return "0 B";
+app.get(
+    "/api/status",
+    authenticate,
+    (req, res) => {
 
+        res.json({
+            success: true,
+            status: "online",
+            storage: STORAGE_ROOT,
+            timestamp: new Date().toISOString()
+        });
     }
+);
 
-    const units = [
-        "B",
-        "KB",
-        "MB",
-        "GB",
-        "TB"
-    ];
+// ----------------------------------------------------
+// LIST FILES AND FOLDERS
+// ----------------------------------------------------
 
-    const index =
-        Math.min(
-            units.length - 1,
-            Math.floor(
-                Math.log(bytes) /
-                Math.log(1024)
-            )
-        );
-
-    return (
-        (
-            bytes /
-            Math.pow(
-                1024,
-                index
-            )
-        ).toFixed(
-            index === 0
-                ? 0
-                : 2
-        )
-        +
-        " "
-        +
-        units[index]
-    );
-}
-
-
-// ======================================================
-// MIME TYPE
-// ======================================================
-
-function getMimeType(
-    filePath
-) {
-
-    const ext =
-        path.extname(
-            filePath
-        ).toLowerCase();
-
-    const types = {
-
-        ".jpg":
-            "image/jpeg",
-
-        ".jpeg":
-            "image/jpeg",
-
-        ".png":
-            "image/png",
-
-        ".gif":
-            "image/gif",
-
-        ".webp":
-            "image/webp",
-
-        ".bmp":
-            "image/bmp",
-
-        ".svg":
-            "image/svg+xml",
-
-        ".mp4":
-            "video/mp4",
-
-        ".webm":
-            "video/webm",
-
-        ".mkv":
-            "video/x-matroska",
-
-        ".mov":
-            "video/quicktime",
-
-        ".avi":
-            "video/x-msvideo",
-
-        ".mp3":
-            "audio/mpeg",
-
-        ".wav":
-            "audio/wav",
-
-        ".m4a":
-            "audio/mp4",
-
-        ".aac":
-            "audio/aac",
-
-        ".ogg":
-            "audio/ogg",
-
-        ".flac":
-            "audio/flac",
-
-        ".pdf":
-            "application/pdf",
-
-        ".zip":
-            "application/zip",
-
-        ".rar":
-            "application/vnd.rar",
-
-        ".7z":
-            "application/x-7z-compressed",
-
-        ".txt":
-            "text/plain",
-
-        ".json":
-            "application/json",
-
-        ".doc":
-            "application/msword",
-
-        ".docx":
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-
-        ".xls":
-            "application/vnd.ms-excel",
-
-        ".xlsx":
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-    };
-
-    return (
-        types[ext] ||
-        "application/octet-stream"
-    );
-}
-
-
-// ======================================================
-// CALCULATE STORAGE
-// ======================================================
-
-async function calculateStorage() {
-
-    let total = 0;
-
-    async function scan(
-        directory
-    ) {
-
-        let entries;
+app.get(
+    "/api/files",
+    authenticate,
+    async (req, res) => {
 
         try {
 
-            entries =
-                await fsp.readdir(
+            const requestedPath =
+                req.query.path || "";
+
+            const directory =
+                safePath(requestedPath);
+
+            if (!fs.existsSync(directory)) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "Folder not found"
+                });
+            }
+
+            const entries =
+                await fs.promises.readdir(
                     directory,
                     {
                         withFileTypes: true
                     }
                 );
 
-        } catch {
-
-            return;
-
-        }
-
-        for (
-            const entry of entries
-        ) {
-
-            if (
-                entry.name ===
-                ".uploading"
-            ) {
-
-                continue;
-
-            }
-
-            const full =
-                path.join(
-                    directory,
-                    entry.name
-                );
-
-            if (
-                entry.isDirectory()
-            ) {
-
-                await scan(
-                    full
-                );
-
-            } else {
-
-                try {
-
-                    const stat =
-                        await fsp.stat(
-                            full
-                        );
-
-                    total +=
-                        stat.size;
-
-                } catch {}
-
-            }
-
-        }
-
-    }
-
-    await scan(
-        STORAGE_DIR
-    );
-
-    return total;
-}
-
-
-// ======================================================
-// STATIC HEALTH PAGE
-// ======================================================
-
-app.get(
-    "/",
-    (req, res) => {
-
-        res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Remote Storage Server</title>
-
-<style>
-
-body{
-    margin:0;
-    padding:30px;
-    background:#070b14;
-    color:white;
-    font-family:system-ui,sans-serif;
-}
-
-.card{
-    max-width:600px;
-    margin:auto;
-    padding:25px;
-    border-radius:20px;
-    background:#111827;
-    border:1px solid #263244;
-}
-
-h1{
-    margin-top:0;
-}
-
-.ok{
-    color:#34d399;
-}
-
-.info{
-    color:#94a3b8;
-    line-height:1.7;
-}
-
-</style>
-</head>
-
-<body>
-
-<div class="card">
-
-<h1>☁️ Remote Storage</h1>
-
-<p class="ok">
-● Server Online
-</p>
-
-<div class="info">
-
-<p>
-This server is ready for the
-Remote Storage Android application.
-</p>
-
-<p>
-Storage API: Online
-</p>
-
-<p>
-Remote Controller API: Online
-</p>
-
-</div>
-
-</div>
-
-</body>
-</html>
-        `);
-
-    }
-);
-
-
-// ======================================================
-// HEALTH API
-// ======================================================
-
-app.get(
-    "/api/health",
-    (req, res) => {
-
-        res.json({
-
-            ok: true,
-
-            service:
-                "remote-storage",
-
-            time:
-                new Date().toISOString()
-
-        });
-
-    }
-);
-
-
-// ======================================================
-// AUTHENTICATED ROUTES
-// ======================================================
-
-app.use(
-    "/api",
-    authenticate
-);
-
-
-// ======================================================
-// STORAGE INFORMATION
-// ======================================================
-
-app.get(
-    "/api/storage",
-    async (req, res) => {
-
-        try {
-
-            const used =
-                await calculateStorage();
-
-            const free =
-                Math.max(
-                    0,
-                    MAX_STORAGE -
-                    used
-                );
-
-            res.json({
-
-                used,
-
-                usedText:
-                    formatBytes(
-                        used
-                    ),
-
-                total:
-                    MAX_STORAGE,
-
-                totalText:
-                    formatBytes(
-                        MAX_STORAGE
-                    ),
-
-                free,
-
-                freeText:
-                    formatBytes(
-                        free
-                    ),
-
-                percent:
-                    MAX_STORAGE > 0
-                        ? Math.min(
-                            100,
-                            (
-                                used /
-                                MAX_STORAGE
-                            ) *
-                            100
-                        )
-                        : 0
-
-            });
-
-        } catch (error) {
-
-            res
-                .status(500)
-                .json({
-
-                    error:
-                        error.message
-
-                });
-
-        }
-
-    }
-);
-
-
-// ======================================================
-// FILE LIST
-// ======================================================
-
-app.get(
-    "/api/files",
-    async (req, res) => {
-
-        async function scan(
-            directory,
-            relative = ""
-        ) {
-
-            let entries;
-
-            try {
-
-                entries =
-                    await fsp.readdir(
-                        directory,
-                        {
-                            withFileTypes: true
-                        }
-                    );
-
-            } catch {
-
-                return [];
-
-            }
-
             const result = [];
 
-            for (
-                const entry of entries
-            ) {
+            for (const entry of entries) {
 
-                if (
-                    entry.name ===
-                    ".uploading"
-                ) {
-
-                    continue;
-
-                }
+                const relativePath =
+                    path.relative(
+                        FILES_DIR,
+                        path.join(
+                            directory,
+                            entry.name
+                        )
+                    );
 
                 const fullPath =
                     path.join(
@@ -740,1718 +188,608 @@ app.get(
                         entry.name
                     );
 
-                const relativePath =
-                    path
-                        .join(
-                            relative,
-                            entry.name
-                        )
-                        .replace(
-                            /\\/g,
-                            "/"
+                let size = 0;
+                let modified = null;
+
+                try {
+
+                    const stats =
+                        await fs.promises.stat(
+                            fullPath
                         );
 
-                if (
-                    entry.isDirectory()
-                ) {
+                    size =
+                        entry.isFile()
+                            ? stats.size
+                            : 0;
 
-                    result.push({
+                    modified =
+                        stats.mtime.toISOString();
 
-                        type:
-                            "folder",
+                } catch (_) {}
 
-                        name:
-                            relativePath,
-
-                        size:
-                            0,
-
-                        sizeText:
-                            "-"
-
-                    });
-
-                    const children =
-                        await scan(
-                            fullPath,
-                            relativePath
-                        );
-
-                    result.push(
-                        ...children
-                    );
-
-                } else {
-
-                    try {
-
-                        const stat =
-                            await fsp.stat(
-                                fullPath
-                            );
-
-                        result.push({
-
-                            type:
-                                "file",
-
-                            name:
-                                relativePath,
-
-                            size:
-                                stat.size,
-
-                            sizeText:
-                                formatBytes(
-                                    stat.size
-                                ),
-
-                            modified:
-                                stat.mtime
-                                    .toISOString(),
-
-                            mime:
-                                getMimeType(
-                                    fullPath
-                                )
-
-                        });
-
-                    } catch {}
-
-                }
-
-            }
-
-            return result;
-
-        }
-
-        try {
-
-            const files =
-                await scan(
-                    STORAGE_DIR
-                );
-
-            res.json(
-                files
-            );
-
-        } catch (error) {
-
-            console.error(
-                "List error:",
-                error
-            );
-
-            res
-                .status(500)
-                .json({
-
-                    error:
-                        "Could not list files"
-
-                });
-
-        }
-
-    }
-);
-
-
-// ======================================================
-// CHECK IF FILE EXISTS
-// ======================================================
-
-app.get(
-    "/api/file-info",
-    async (req, res) => {
-
-        try {
-
-            const relative =
-                cleanPath(
-                    req.query.path
-                );
-
-            if (!relative) {
-
-                return res
-                    .status(400)
-                    .json({
-                        error:
-                            "Path required"
-                    });
-
-            }
-
-            const filePath =
-                resolveStoragePath(
-                    relative
-                );
-
-            const stat =
-                await fsp.stat(
-                    filePath
-                );
-
-            res.json({
-
-                name:
-                    relative,
-
-                size:
-                    stat.size,
-
-                sizeText:
-                    formatBytes(
-                        stat.size
-                    ),
-
-                type:
-                    stat.isDirectory()
+                result.push({
+                    name: entry.name,
+                    type: entry.isDirectory()
                         ? "folder"
                         : "file",
+                    size,
+                    modified,
+                    path: relativePath
+                });
+            }
 
-                modified:
-                    stat.mtime.toISOString(),
+            result.sort((a, b) => {
 
-                mime:
-                    getMimeType(
-                        filePath
-                    )
+                if (a.type !== b.type) {
+                    return a.type === "folder"
+                        ? -1
+                        : 1;
+                }
 
+                return a.name.localeCompare(
+                    b.name
+                );
+            });
+
+            res.json({
+                success: true,
+                path: requestedPath,
+                items: result
             });
 
         } catch (error) {
 
-            res
-                .status(404)
-                .json({
+            console.error(error);
 
-                    error:
-                        "File not found"
-
-                });
-
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
         }
-
     }
 );
 
-
-// ======================================================
-// CHUNK UPLOAD
-// ======================================================
+// ----------------------------------------------------
+// CREATE FOLDER
+// ----------------------------------------------------
 
 app.post(
-    "/api/upload-chunk",
+    "/api/folder",
+    authenticate,
     async (req, res) => {
-
-        let temporaryChunk = null;
 
         try {
 
-            const id =
-                String(
-                    req.query.id ||
-                    ""
-                );
+            const folderPath =
+                req.body.path;
 
-            const index =
-                Number(
-                    req.query.index
-                );
+            if (!folderPath) {
 
-            const total =
-                Number(
-                    req.query.total
-                );
-
-            const fileSize =
-                Number(
-                    req.query.size
-                );
-
-            const fileName =
-                String(
-                    req.query.name ||
-                    "file"
-                );
-
-            const relativePath =
-                String(
-                    req.query.relativePath ||
-                    fileName
-                );
-
-
-            // ------------------------------------------
-            // VALIDATION
-            // ------------------------------------------
-
-            if (
-                !/^[a-zA-Z0-9_-]{8,100}$/
-                    .test(id)
-            ) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Invalid upload ID"
-
-                    });
-
+                return res.status(400).json({
+                    success: false,
+                    error: "Folder path required"
+                });
             }
 
-            if (
-                !Number.isInteger(
-                    index
-                ) ||
-                !Number.isInteger(
-                    total
-                ) ||
-                total < 1 ||
-                index < 0 ||
-                index >= total
-            ) {
+            const directory =
+                safePath(folderPath);
 
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Invalid chunk"
-
-                    });
-
-            }
-
-            if (
-                !Number.isSafeInteger(
-                    fileSize
-                ) ||
-                fileSize < 1 ||
-                fileSize >
-                MAX_FILE_SIZE
-            ) {
-
-                return res
-                    .status(413)
-                    .json({
-
-                        error:
-                            "File exceeds 20 GB limit"
-
-                    });
-
-            }
-
-
-            // ------------------------------------------
-            // STORAGE QUOTA
-            // ------------------------------------------
-
-            const currentStorage =
-                await calculateStorage();
-
-            if (
-                currentStorage +
-                fileSize >
-                MAX_STORAGE
-            ) {
-
-                return res
-                    .status(413)
-                    .json({
-
-                        error:
-                            "Storage limit reached",
-
-                        used:
-                            currentStorage,
-
-                        available:
-                            Math.max(
-                                0,
-                                MAX_STORAGE -
-                                currentStorage
-                            )
-
-                    });
-
-            }
-
-
-            // ------------------------------------------
-            // UPLOAD DIRECTORY
-            // ------------------------------------------
-
-            const uploadDir =
-                path.join(
-                    TEMP_DIR,
-                    id
-                );
-
-            await fsp.mkdir(
-                uploadDir,
+            await fs.promises.mkdir(
+                directory,
                 {
                     recursive: true
                 }
             );
 
-
-            const metadataPath =
-                path.join(
-                    uploadDir,
-                    "metadata.json"
-                );
-
-            const partialPath =
-                path.join(
-                    uploadDir,
-                    "file.partial"
-                );
-
-
-            // ------------------------------------------
-            // LOAD / CREATE METADATA
-            // ------------------------------------------
-
-            let metadata;
-
-            try {
-
-                metadata =
-                    JSON.parse(
-                        await fsp.readFile(
-                            metadataPath,
-                            "utf8"
-                        )
-                    );
-
-            } catch {
-
-                metadata = {
-
-                    id,
-
-                    name:
-                        fileName,
-
-                    relativePath,
-
-                    size:
-                        fileSize,
-
-                    total,
-
-                    nextChunk:
-                        0
-
-                };
-
-                await fsp.writeFile(
-                    metadataPath,
-                    JSON.stringify(
-                        metadata,
-                        null,
-                        2
-                    )
-                );
-
-            }
-
-
-            // ------------------------------------------
-            // VERIFY SAME UPLOAD
-            // ------------------------------------------
-
-            if (
-                metadata.size !==
-                fileSize ||
-                metadata.total !==
-                total
-            ) {
-
-                return res
-                    .status(409)
-                    .json({
-
-                        error:
-                            "Upload metadata mismatch"
-
-                    });
-
-            }
-
-
-            // ------------------------------------------
-            // DUPLICATE CHUNK
-            // ------------------------------------------
-
-            if (
-                index <
-                metadata.nextChunk
-            ) {
-
-                return res.json({
-
-                    ok:
-                        true,
-
-                    alreadyReceived:
-                        true,
-
-                    nextChunk:
-                        metadata.nextChunk,
-
-                    done:
-                        metadata.nextChunk >=
-                        total
-
-                });
-
-            }
-
-
-            // ------------------------------------------
-            // SEQUENTIAL CHUNKS ONLY
-            // ------------------------------------------
-
-            if (
-                index !==
-                metadata.nextChunk
-            ) {
-
-                return res
-                    .status(409)
-                    .json({
-
-                        error:
-                            "Wrong chunk order",
-
-                        nextChunk:
-                            metadata.nextChunk
-
-                    });
-
-            }
-
-
-            // ------------------------------------------
-            // SAVE TEMP CHUNK
-            // ------------------------------------------
-
-            temporaryChunk =
-                path.join(
-                    uploadDir,
-                    `chunk-${index}.tmp`
-                );
-
-
-            await new Promise(
-                (
-                    resolve,
-                    reject
-                ) => {
-
-                    const output =
-                        fs.createWriteStream(
-                            temporaryChunk
-                        );
-
-                    let failed = false;
-
-                    function fail(
-                        error
-                    ) {
-
-                        if (
-                            failed
-                        ) {
-
-                            return;
-
-                        }
-
-                        failed = true;
-
-                        output.destroy();
-
-                        reject(
-                            error
-                        );
-
-                    }
-
-                    req.on(
-                        "error",
-                        fail
-                    );
-
-                    req.on(
-                        "aborted",
-                        () => {
-
-                            fail(
-                                new Error(
-                                    "Connection aborted"
-                                )
-                            );
-
-                        }
-                    );
-
-                    output.on(
-                        "error",
-                        fail
-                    );
-
-                    output.on(
-                        "finish",
-                        () => {
-
-                            if (
-                                failed
-                            ) {
-
-                                return;
-
-                            }
-
-                            resolve();
-
-                        }
-                    );
-
-                    req.pipe(
-                        output
-                    );
-
-                }
-            );
-
-
-            // ------------------------------------------
-            // VERIFY CHUNK SIZE
-            // ------------------------------------------
-
-            const chunkStat =
-                await fsp.stat(
-                    temporaryChunk
-                );
-
-            const expectedChunkSize =
-                Math.min(
-                    CHUNK_SIZE,
-                    fileSize -
-                    (
-                        index *
-                        CHUNK_SIZE
-                    )
-                );
-
-            if (
-                chunkStat.size !==
-                expectedChunkSize
-            ) {
-
-                await fsp.unlink(
-                    temporaryChunk
-                ).catch(
-                    () => {}
-                );
-
-                temporaryChunk =
-                    null;
-
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Chunk size mismatch",
-
-                        expected:
-                            expectedChunkSize,
-
-                        received:
-                            chunkStat.size
-
-                    });
-
-            }
-
-
-            // ------------------------------------------
-            // APPEND CHUNK
-            // ------------------------------------------
-
-            await new Promise(
-                (
-                    resolve,
-                    reject
-                ) => {
-
-                    const input =
-                        fs.createReadStream(
-                            temporaryChunk
-                        );
-
-                    const output =
-                        fs.createWriteStream(
-                            partialPath,
-                            {
-                                flags:
-                                    "a"
-                            }
-                        );
-
-                    input.on(
-                        "error",
-                        reject
-                    );
-
-                    output.on(
-                        "error",
-                        reject
-                    );
-
-                    output.on(
-                        "finish",
-                        resolve
-                    );
-
-                    input.pipe(
-                        output
-                    );
-
-                }
-            );
-
-
-            await fsp.unlink(
-                temporaryChunk
-            ).catch(
-                () => {}
-            );
-
-            temporaryChunk =
-                null;
-
-
-            // ------------------------------------------
-            // UPDATE METADATA
-            // ------------------------------------------
-
-            metadata.nextChunk =
-                index + 1;
-
-            await fsp.writeFile(
-                metadataPath,
-                JSON.stringify(
-                    metadata,
-                    null,
-                    2
-                )
-            );
-
-
-            // ------------------------------------------
-            // NOT FINAL CHUNK
-            // ------------------------------------------
-
-            if (
-                index !==
-                total - 1
-            ) {
-
-                return res.json({
-
-                    ok:
-                        true,
-
-                    done:
-                        false,
-
-                    nextChunk:
-                        metadata.nextChunk
-
-                });
-
-            }
-
-
-            // ------------------------------------------
-            // FINAL FILE CHECK
-            // ------------------------------------------
-
-            const finalStat =
-                await fsp.stat(
-                    partialPath
-                );
-
-            if (
-                finalStat.size !==
-                fileSize
-            ) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Final file size mismatch",
-
-                        expected:
-                            fileSize,
-
-                        received:
-                            finalStat.size
-
-                    });
-
-            }
-
-
-            // ------------------------------------------
-            // SAFE FINAL PATH
-            // ------------------------------------------
-
-            const safeRelative =
-                cleanPath(
-                    relativePath
-                ) ||
-                cleanPath(
-                    fileName
-                );
-
-            const finalPath =
-                resolveStoragePath(
-                    safeRelative
-                );
-
-            await fsp.mkdir(
-                path.dirname(
-                    finalPath
-                ),
-                {
-                    recursive:
-                        true
-                }
-            );
-
-
-            // ------------------------------------------
-            // DON'T OVERWRITE EXISTING FILE
-            // ------------------------------------------
-
-            let target =
-                finalPath;
-
-            try {
-
-                await fsp.access(
-                    target
-                );
-
-                const extension =
-                    path.extname(
-                        target
-                    );
-
-                const base =
-                    path.basename(
-                        target,
-                        extension
-                    );
-
-                target =
-                    path.join(
-                        path.dirname(
-                            target
-                        ),
-                        base +
-                        "-" +
-                        Date.now() +
-                        extension
-                    );
-
-            } catch {
-
-                // File does not exist.
-
-            }
-
-
-            // ------------------------------------------
-            // MOVE FINAL FILE
-            // ------------------------------------------
-
-            await fsp.rename(
-                partialPath,
-                target
-            );
-
-
-            // ------------------------------------------
-            // REMOVE TEMP DIRECTORY
-            // ------------------------------------------
-
-            await fsp.rm(
-                uploadDir,
-                {
-                    recursive:
-                        true,
-                    force:
-                        true
-                }
-            );
-
-
-            const savedName =
-                path
-                    .relative(
-                        STORAGE_DIR,
-                        target
-                    )
-                    .replace(
-                        /\\/g,
-                        "/"
-                    );
-
-
-            console.log(
-                "Upload completed:",
-                savedName
-            );
-
-
-            return res.json({
-
-                ok:
-                    true,
-
-                done:
-                    true,
-
-                name:
-                    savedName,
-
-                size:
-                    finalStat.size,
-
-                sizeText:
-                    formatBytes(
-                        finalStat.size
-                    )
-
+            res.json({
+                success: true,
+                message: "Folder created",
+                path: folderPath
             });
 
         } catch (error) {
 
-            if (
-                temporaryChunk
-            ) {
+            console.error(error);
 
-                await fsp.unlink(
-                    temporaryChunk
-                ).catch(
-                    () => {}
-                );
-
-            }
-
-            console.error(
-                "Upload error:",
-                error
-            );
-
-            if (
-                error.message ===
-                "Connection aborted"
-            ) {
-
-                return;
-
-            }
-
-            if (
-                !res.headersSent
-            ) {
-
-                return res
-                    .status(500)
-                    .json({
-
-                        error:
-                            error.message ||
-                            "Upload failed"
-
-                    });
-
-            }
-
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
         }
-
     }
 );
 
-
-// ======================================================
-// DOWNLOAD
-// ======================================================
+// ----------------------------------------------------
+// DOWNLOAD FILE
+// ----------------------------------------------------
 
 app.get(
-    "/api/download/*",
+    "/api/download",
+    authenticate,
     async (req, res) => {
 
         try {
 
-            const requested =
-                req.params[0];
-
-            const relative =
-                cleanPath(
-                    requested
-                );
-
-            if (!relative) {
-
-                return res
-                    .status(400)
-                    .send(
-                        "Invalid file"
-                    );
-
-            }
-
             const filePath =
-                resolveStoragePath(
-                    relative
-                );
+                req.query.path;
 
-            let stat;
+            if (!filePath) {
 
-            try {
-
-                stat =
-                    await fsp.stat(
-                        filePath
-                    );
-
-            } catch {
-
-                return res
-                    .status(404)
-                    .send(
-                        "File not found"
-                    );
-
+                return res.status(400).json({
+                    success: false,
+                    error: "File path required"
+                });
             }
 
-            if (
-                !stat.isFile()
-            ) {
+            const fullPath =
+                safePath(filePath);
 
-                return res
-                    .status(404)
-                    .send(
-                        "File not found"
-                    );
+            if (!fs.existsSync(fullPath)) {
 
+                return res.status(404).json({
+                    success: false,
+                    error: "File not found"
+                });
             }
 
-
-            const mime =
-                getMimeType(
-                    filePath
+            const stats =
+                await fs.promises.stat(
+                    fullPath
                 );
 
-            const downloadName =
-                path.basename(
-                    filePath
-                )
-                .replace(
-                    /"/g,
-                    ""
-                );
+            if (!stats.isFile()) {
 
-
-            res.setHeader(
-                "Content-Type",
-                mime
-            );
-
-            res.setHeader(
-                "Accept-Ranges",
-                "bytes"
-            );
-
-            res.setHeader(
-                "Cache-Control",
-                "no-cache, no-store"
-            );
-
-            res.setHeader(
-                "Content-Disposition",
-                `attachment; filename="${downloadName}"`
-            );
-
-
-            // ------------------------------------------
-            // RANGE REQUEST
-            // ------------------------------------------
-
-            const range =
-                req.headers.range;
-
-            if (range) {
-
-                const match =
-                    range.match(
-                        /bytes=(\d*)-(\d*)/
-                    );
-
-                if (!match) {
-
-                    return res
-                        .status(416)
-                        .setHeader(
-                            "Content-Range",
-                            `bytes */${stat.size}`
-                        )
-                        .end();
-
-                }
-
-                let start =
-                    match[1]
-                        ? Number(
-                            match[1]
-                        )
-                        : 0;
-
-                let end =
-                    match[2]
-                        ? Number(
-                            match[2]
-                        )
-                        : stat.size - 1;
-
-                if (
-                    !Number.isSafeInteger(
-                        start
-                    ) ||
-                    !Number.isSafeInteger(
-                        end
-                    ) ||
-                    start < 0 ||
-                    end < start ||
-                    start >= stat.size
-                ) {
-
-                    return res
-                        .status(416)
-                        .setHeader(
-                            "Content-Range",
-                            `bytes */${stat.size}`
-                        )
-                        .end();
-
-                }
-
-                end =
-                    Math.min(
-                        end,
-                        stat.size - 1
-                    );
-
-                const length =
-                    end -
-                    start +
-                    1;
-
-                res.status(
-                    206
-                );
-
-                res.setHeader(
-                    "Content-Range",
-                    `bytes ${start}-${end}/${stat.size}`
-                );
-
-                res.setHeader(
-                    "Content-Length",
-                    length
-                );
-
-                const stream =
-                    fs.createReadStream(
-                        filePath,
-                        {
-                            start,
-                            end
-                        }
-                    );
-
-                stream.on(
-                    "error",
-                    () => {
-
-                        res.destroy();
-
-                    }
-                );
-
-                return stream.pipe(
-                    res
-                );
-
+                return res.status(400).json({
+                    success: false,
+                    error: "Not a file"
+                });
             }
 
-
-            // ------------------------------------------
-            // FULL DOWNLOAD
-            // ------------------------------------------
-
-            res.setHeader(
-                "Content-Length",
-                stat.size
-            );
-
-            const stream =
-                fs.createReadStream(
-                    filePath
-                );
-
-            stream.on(
-                "error",
-                () => {
-
-                    res.destroy();
-
-                }
-            );
-
-            return stream.pipe(
-                res
+            res.download(
+                fullPath,
+                path.basename(fullPath)
             );
 
         } catch (error) {
 
-            console.error(
-                "Download error:",
-                error
-            );
+            console.error(error);
 
-            if (
-                !res.headersSent
-            ) {
-
-                return res
-                    .status(500)
-                    .send(
-                        "Download error"
-                    );
-
-            }
-
-            res.destroy();
-
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
         }
-
     }
 );
 
-
-// ======================================================
-// DELETE FILE
-// ======================================================
+// ----------------------------------------------------
+// DELETE FILE OR FOLDER
+// ----------------------------------------------------
 
 app.delete(
     "/api/files",
-    express.json({
-        limit:
-            "1mb"
-    }),
+    authenticate,
     async (req, res) => {
 
         try {
 
-            const relative =
-                cleanPath(
-                    req.body?.name
-                );
+            const targetPath =
+                req.body.path ||
+                req.query.path;
 
-            if (!relative) {
+            if (!targetPath) {
 
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "File name required"
-
-                    });
-
+                return res.status(400).json({
+                    success: false,
+                    error: "Path required"
+                });
             }
 
-            const filePath =
-                resolveStoragePath(
-                    relative
-                );
+            const fullPath =
+                safePath(targetPath);
 
-            const stat =
-                await fsp.stat(
-                    filePath
-                );
+            if (!fs.existsSync(fullPath)) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "File or folder not found"
+                });
+            }
+
+            const resolvedRoot =
+                path.resolve(FILES_DIR);
+
+            const resolvedTarget =
+                path.resolve(fullPath);
 
             if (
-                !stat.isFile()
+                resolvedTarget === resolvedRoot
             ) {
 
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Not a file"
-
-                    });
-
+                return res.status(403).json({
+                    success: false,
+                    error: "Root storage cannot be deleted"
+                });
             }
 
-            await fsp.unlink(
-                filePath
+            await fs.promises.rm(
+                fullPath,
+                {
+                    recursive: true,
+                    force: true
+                }
             );
 
-
             res.json({
-
-                ok:
-                    true,
-
-                deleted:
-                    relative
-
+                success: true,
+                message: "Deleted successfully",
+                path: targetPath
             });
 
         } catch (error) {
 
-            console.error(
-                "Delete error:",
-                error
-            );
+            console.error(error);
 
-            res
-                .status(
-                    error.code ===
-                    "ENOENT"
-                        ? 404
-                        : 500
-                )
-                .json({
-
-                    error:
-                        error.message ||
-                        "Delete failed"
-
-                });
-
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
         }
-
     }
 );
 
-
-// ======================================================
-// RENAME FILE
-// ======================================================
+// ----------------------------------------------------
+// CHUNK UPLOAD
+// ----------------------------------------------------
 
 app.post(
-    "/api/rename",
-    express.json({
-        limit:
-            "1mb"
-    }),
+    "/api/upload/chunk",
+    authenticate,
     async (req, res) => {
 
         try {
 
-            const oldName =
-                cleanPath(
-                    req.body?.oldName
+            const {
+                uploadId,
+                fileName,
+                relativePath,
+                chunkIndex,
+                totalChunks,
+                data
+            } = req.body;
+
+            if (
+                !uploadId ||
+                !fileName ||
+                !data ||
+                chunkIndex === undefined ||
+                !totalChunks
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    error: "Missing upload information"
+                });
+            }
+
+            if (
+                !/^[a-zA-Z0-9_-]+$/.test(
+                    uploadId
+                )
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    error: "Invalid upload ID"
+                });
+            }
+
+            const uploadDirectory =
+                path.join(
+                    TEMP_DIR,
+                    uploadId
                 );
 
-            const newName =
-                cleanPath(
-                    req.body?.newName
+            await fs.promises.mkdir(
+                uploadDirectory,
+                {
+                    recursive: true
+                }
+            );
+
+            const chunkFile =
+                path.join(
+                    uploadDirectory,
+                    `${chunkIndex}.chunk`
+                );
+
+            const buffer =
+                Buffer.from(
+                    data,
+                    "base64"
+                );
+
+            await fs.promises.writeFile(
+                chunkFile,
+                buffer
+            );
+
+            res.json({
+                success: true,
+                uploadId,
+                chunkIndex,
+                totalChunks,
+                message: "Chunk uploaded"
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    }
+);
+
+// ----------------------------------------------------
+// COMPLETE CHUNK UPLOAD
+// ----------------------------------------------------
+
+app.post(
+    "/api/upload/complete",
+    authenticate,
+    async (req, res) => {
+
+        try {
+
+            const {
+                uploadId,
+                fileName,
+                relativePath,
+                totalChunks
+            } = req.body;
+
+            if (
+                !uploadId ||
+                !fileName ||
+                !totalChunks
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    error: "Missing upload information"
+                });
+            }
+
+            const uploadDirectory =
+                path.join(
+                    TEMP_DIR,
+                    uploadId
                 );
 
             if (
-                !oldName ||
-                !newName
+                !fs.existsSync(
+                    uploadDirectory
+                )
             ) {
 
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Old and new names are required"
-
-                    });
-
+                return res.status(404).json({
+                    success: false,
+                    error: "Upload session not found"
+                });
             }
 
-            const oldPath =
-                resolveStoragePath(
-                    oldName
+            const finalRelativePath =
+                relativePath
+                    ? path.join(
+                        relativePath,
+                        fileName
+                    )
+                    : fileName;
+
+            const finalPath =
+                safePath(
+                    finalRelativePath
                 );
 
-            const newPath =
-                resolveStoragePath(
-                    newName
-                );
-
-            await fsp.stat(
-                oldPath
+            await fs.promises.mkdir(
+                path.dirname(finalPath),
+                {
+                    recursive: true
+                }
             );
 
+            const output =
+                fs.createWriteStream(
+                    finalPath
+                );
 
             try {
 
-                await fsp.access(
-                    newPath
+                for (
+                    let i = 0;
+                    i < Number(totalChunks);
+                    i++
+                ) {
+
+                    const chunkPath =
+                        path.join(
+                            uploadDirectory,
+                            `${i}.chunk`
+                        );
+
+                    if (
+                        !fs.existsSync(
+                            chunkPath
+                        )
+                    ) {
+
+                        output.destroy();
+
+                        return res.status(400).json({
+                            success: false,
+                            error:
+                                `Missing chunk ${i}`
+                        });
+                    }
+
+                    const chunk =
+                        await fs.promises.readFile(
+                            chunkPath
+                        );
+
+                    await new Promise(
+                        (resolve, reject) => {
+
+                            output.write(
+                                chunk,
+                                error => {
+
+                                    if (error) {
+                                        reject(error);
+                                    } else {
+                                        resolve();
+                                    }
+                                }
+                            );
+                        }
+                    );
+                }
+
+                await new Promise(
+                    resolve => {
+                        output.end(resolve);
+                    }
                 );
 
-                return res
-                    .status(409)
-                    .json({
+            } catch (error) {
 
-                        error:
-                            "A file with that name already exists"
+                output.destroy();
 
-                    });
-
-            } catch {
-
-                // Target doesn't exist.
-
+                throw error;
             }
 
-
-            await fsp.mkdir(
-                path.dirname(
-                    newPath
-                ),
+            await fs.promises.rm(
+                uploadDirectory,
                 {
-                    recursive:
-                        true
+                    recursive: true,
+                    force: true
                 }
             );
 
-            await fsp.rename(
-                oldPath,
-                newPath
-            );
-
-
             res.json({
-
-                ok:
-                    true,
-
-                oldName,
-
-                newName
-
+                success: true,
+                message: "File uploaded successfully",
+                path: finalRelativePath
             });
 
         } catch (error) {
 
-            console.error(
-                "Rename error:",
-                error
-            );
+            console.error(error);
 
-            res
-                .status(500)
-                .json({
-
-                    error:
-                        error.message ||
-                        "Rename failed"
-
-                });
-
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
         }
-
     }
 );
 
-
-// ======================================================
-// DELETE FOLDER
-// ======================================================
+// ----------------------------------------------------
+// CANCEL UPLOAD
+// ----------------------------------------------------
 
 app.delete(
-    "/api/folder",
-    express.json({
-        limit:
-            "1mb"
-    }),
+    "/api/upload/:uploadId",
+    authenticate,
     async (req, res) => {
 
         try {
 
-            const relative =
-                cleanPath(
-                    req.body?.name
-                );
-
-            if (!relative) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Folder name required"
-
-                    });
-
-            }
-
-            const folderPath =
-                resolveStoragePath(
-                    relative
-                );
-
-            const stat =
-                await fsp.stat(
-                    folderPath
-                );
+            const uploadId =
+                req.params.uploadId;
 
             if (
-                !stat.isDirectory()
+                !/^[a-zA-Z0-9_-]+$/.test(
+                    uploadId
+                )
             ) {
 
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Not a folder"
-
-                    });
-
+                return res.status(400).json({
+                    success: false,
+                    error: "Invalid upload ID"
+                });
             }
 
-            await fsp.rm(
-                folderPath,
+            const uploadDirectory =
+                path.join(
+                    TEMP_DIR,
+                    uploadId
+                );
+
+            await fs.promises.rm(
+                uploadDirectory,
                 {
-                    recursive:
-                        true,
-                    force:
-                        true
+                    recursive: true,
+                    force: true
                 }
             );
 
-
             res.json({
-
-                ok:
-                    true,
-
-                deleted:
-                    relative
-
+                success: true,
+                message: "Upload cancelled"
             });
 
         } catch (error) {
 
-            console.error(
-                "Folder delete error:",
-                error
-            );
+            console.error(error);
 
-            res
-                .status(500)
-                .json({
-
-                    error:
-                        error.message ||
-                        "Folder delete failed"
-
-                });
-
-        }
-
-    }
-);
-
-
-// ======================================================
-// CREATE FOLDER
-// ======================================================
-
-app.post(
-    "/api/folder",
-    express.json({
-        limit:
-            "1mb"
-    }),
-    async (req, res) => {
-
-        try {
-
-            const relative =
-                cleanPath(
-                    req.body?.name
-                );
-
-            if (!relative) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Folder name required"
-
-                    });
-
-            }
-
-            const folderPath =
-                resolveStoragePath(
-                    relative
-                );
-
-            await fsp.mkdir(
-                folderPath,
-                {
-                    recursive:
-                        true
-                }
-            );
-
-
-            res.json({
-
-                ok:
-                    true,
-
-                name:
-                    relative
-
+            res.status(500).json({
+                success: false,
+                error: error.message
             });
-
-        } catch (error) {
-
-            console.error(
-                "Folder creation error:",
-                error
-            );
-
-            res
-                .status(500)
-                .json({
-
-                    error:
-                        error.message ||
-                        "Could not create folder"
-
-                });
-
         }
-
     }
 );
 
+// ----------------------------------------------------
+// GLOBAL ERROR HANDLER
+// ----------------------------------------------------
 
-// ======================================================
+app.use(
+    (error, req, res, next) => {
+
+        console.error(
+            "Server error:",
+            error
+        );
+
+        res.status(500).json({
+            success: false,
+            error: "Internal server error"
+        });
+    }
+);
+
+// ----------------------------------------------------
 // START SERVER
-// ======================================================
+// ----------------------------------------------------
 
-createDirectories()
-    .then(
-        () => {
+app.listen(
+    PORT,
+    "0.0.0.0",
+    () => {
 
-            app.listen(
-                PORT,
-                "0.0.0.0",
-                () => {
+        console.log(
+            `Cloud Vault Pro running on port ${PORT}`
+        );
 
-                    console.log(
-                        "================================="
-                    );
-
-                    console.log(
-                        "Remote Storage Server"
-                    );
-
-                    console.log(
-                        "================================="
-                    );
-
-                    console.log(
-                        "Port:",
-                        PORT
-                    );
-
-                    console.log(
-                        "Storage:",
-                        STORAGE_DIR
-                    );
-
-                    console.log(
-                        "Maximum file:",
-                        formatBytes(
-                            MAX_FILE_SIZE
-                        )
-                    );
-
-                    console.log(
-                        "Maximum storage:",
-                        formatBytes(
-                            MAX_STORAGE
-                        )
-                    );
-
-                    console.log(
-                        "Authentication:",
-                        VAULT_TOKEN
-                            ? "ENABLED"
-                            : "DISABLED"
-                    );
-
-                    console.log(
-                        "================================="
-                    );
-
-                }
-            );
-
-        }
-    )
-    .catch(
-        error => {
-
-            console.error(
-                "Startup error:",
-                error
-            );
-
-            process.exit(
-                1
-            );
-
-        }
-    );
+        console.log(
+            `Storage directory: ${FILES_DIR}`
+        );
+    }
+);
