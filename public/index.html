@@ -1,22 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
 
-<title>Remote Storage Control</title>
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+>
+
+<title>Cloud Vault Pro</title>
 
 <style>
-*{box-sizing:border-box}
+
+*{
+    box-sizing:border-box;
+}
 
 body{
     margin:0;
     padding:16px;
     min-height:100vh;
+
     background:
-        radial-gradient(circle at top,#18233b,#05070b 55%);
+        radial-gradient(
+            circle at top,
+            #18233b,
+            #05070b 55%
+        );
+
     color:#fff;
-    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+
+    font-family:
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        sans-serif;
 }
 
 .container{
@@ -25,32 +44,56 @@ body{
 }
 
 .card{
-    background:linear-gradient(
-        145deg,
-        rgba(20,30,48,.96),
-        rgba(7,12,22,.97)
-    );
-    border:1px solid rgba(255,255,255,.1);
+    background:
+        linear-gradient(
+            145deg,
+            rgba(20,30,48,.96),
+            rgba(7,12,22,.97)
+        );
+
+    border:
+        1px solid
+        rgba(255,255,255,.1);
+
     border-radius:22px;
+
     padding:20px;
+
     margin-bottom:16px;
-    box-shadow:0 20px 60px rgba(0,0,0,.45);
+
+    box-shadow:
+        0 20px 60px
+        rgba(0,0,0,.45);
 }
 
 .logo{
     text-align:center;
-    font-size:27px;
-    font-weight:800;
-    background:linear-gradient(90deg,#a78bfa,#60a5fa);
+
+    font-size:29px;
+    font-weight:900;
+
+    background:
+        linear-gradient(
+            90deg,
+            #a78bfa,
+            #60a5fa
+        );
+
     -webkit-background-clip:text;
+    background-clip:text;
+
     color:transparent;
 }
 
 .subtitle{
     text-align:center;
+
     color:#94a3b8;
+
     font-size:13px;
-    margin:8px 0 20px;
+
+    margin:
+        8px 0 20px;
 }
 
 h2{
@@ -58,24 +101,64 @@ h2{
     font-size:19px;
 }
 
+input{
+    width:100%;
+
+    padding:14px;
+
+    margin-top:8px;
+
+    border-radius:12px;
+
+    border:
+        1px solid
+        rgba(255,255,255,.12);
+
+    background:#0f172a;
+
+    color:#fff;
+
+    outline:none;
+
+    font-size:15px;
+}
+
 button{
     width:100%;
+
     border:0;
+
     border-radius:13px;
+
     padding:14px;
+
     margin-top:10px;
+
     color:#fff;
+
     font-size:15px;
+
     font-weight:800;
+
     cursor:pointer;
 }
 
 .primary{
-    background:linear-gradient(135deg,#7c3aed,#4f46e5);
+    background:
+        linear-gradient(
+            135deg,
+            #7c3aed,
+            #4f46e5
+        );
 }
 
 .green{
-    background:linear-gradient(135deg,#059669,#10b981);
+    background:
+        linear-gradient(
+            135deg,
+            #059669,
+            #10b981
+        );
 }
 
 .red{
@@ -86,43 +169,57 @@ button{
     background:#334155;
 }
 
-input{
-    width:100%;
-    padding:14px;
-    margin-top:8px;
-    border-radius:12px;
-    border:1px solid rgba(255,255,255,.12);
-    background:#0f172a;
-    color:#fff;
-    outline:none;
-    font-size:15px;
+.status{
+    text-align:center;
+
+    color:#94a3b8;
+
+    font-size:13px;
+
+    margin-top:12px;
+
+    min-height:20px;
+}
+
+.success{
+    color:#4ade80;
+}
+
+.error{
+    color:#f87171;
 }
 
 .code{
     text-align:center;
-    font-size:34px;
-    font-weight:900;
-    letter-spacing:8px;
-    padding:15px;
-    margin:15px 0;
-    background:#020617;
-    border-radius:15px;
-    color:#a78bfa;
-}
 
-.status{
-    text-align:center;
-    color:#94a3b8;
-    font-size:13px;
-    margin-top:12px;
-    min-height:20px;
+    font-size:34px;
+
+    font-weight:900;
+
+    letter-spacing:8px;
+
+    padding:15px;
+
+    margin:15px 0;
+
+    background:#020617;
+
+    border-radius:15px;
+
+    color:#a78bfa;
 }
 
 .device{
     padding:15px;
+
     background:#0f172a;
-    border:1px solid rgba(255,255,255,.08);
+
+    border:
+        1px solid
+        rgba(255,255,255,.08);
+
     border-radius:15px;
+
     margin-top:10px;
 }
 
@@ -133,15 +230,23 @@ input{
 
 .device-info{
     color:#94a3b8;
+
     font-size:12px;
+
     margin-top:5px;
 }
 
 .file{
     padding:14px;
+
     background:#0f172a;
-    border:1px solid rgba(255,255,255,.07);
+
+    border:
+        1px solid
+        rgba(255,255,255,.07);
+
     border-radius:14px;
+
     margin-top:10px;
 }
 
@@ -152,42 +257,47 @@ input{
 
 .file-size{
     color:#94a3b8;
+
     font-size:12px;
+
     margin-top:5px;
 }
 
 .actions{
     display:flex;
+
     gap:8px;
+
     margin-top:10px;
 }
 
-.actions button,
-.actions a{
+.actions button{
     flex:1;
+
     width:auto;
+
     margin:0;
+
     padding:10px;
+
     border-radius:9px;
-    text-align:center;
-    text-decoration:none;
+
     font-size:13px;
 }
 
 .download{
     background:#059669;
-    color:white;
 }
 
 .delete{
     background:#991b1b;
-    color:white;
-    border:0;
 }
 
 .empty{
     text-align:center;
+
     padding:20px;
+
     color:#64748b;
 }
 
@@ -195,26 +305,95 @@ input{
     display:none;
 }
 
-@media(max-width:480px){
-    body{padding:10px}
-    .card{padding:16px}
-    .actions{flex-direction:column}
+.key-box{
+    position:relative;
 }
+
+.key-status{
+    font-size:12px;
+    color:#94a3b8;
+    margin-top:8px;
+}
+
+@media(max-width:480px){
+
+    body{
+        padding:10px;
+    }
+
+    .card{
+        padding:16px;
+    }
+
+    .actions{
+        flex-direction:column;
+    }
+
+}
+
 </style>
+
 </head>
 
 <body>
 
 <div class="container">
 
+<!-- HEADER -->
+
 <div class="card">
 
 <div class="logo">
-☁️ Remote Storage Control
+☁️ Cloud Vault Pro
 </div>
 
 <div class="subtitle">
-Control your second Android phone remotely
+Private Remote Storage Control
+</div>
+
+</div>
+
+
+<!-- API KEY -->
+
+<div class="card">
+
+<h2>🔐 Server Authentication</h2>
+
+<p style="color:#94a3b8;font-size:13px">
+Enter the API key that you configured in Render.
+</p>
+
+<div class="key-box">
+
+<input
+    id="apiKey"
+    type="password"
+    placeholder="Enter Cloud Vault API key"
+    autocomplete="off"
+>
+
+</div>
+
+<button
+    class="primary"
+    onclick="saveApiKey()"
+>
+🔑 Connect to Server
+</button>
+
+<button
+    class="gray"
+    onclick="clearApiKey()"
+>
+🗑️ Clear Saved Key
+</button>
+
+<div
+    id="authStatus"
+    class="key-status"
+>
+Not connected
 </div>
 
 </div>
@@ -227,28 +406,27 @@ Control your second Android phone remotely
 <h2>🔗 Connect Second Phone</h2>
 
 <p style="color:#94a3b8;font-size:13px">
-First create a pairing code, then enter that code
-inside the Remote Storage APK installed on your
-second phone.
+Generate a pairing code and enter it inside
+the Remote Storage APK on your second Android phone.
 </p>
 
 <button
-class="primary"
-onclick="createPairCode()"
+    class="primary"
+    onclick="createPairCode()"
 >
 🔐 Generate Pairing Code
 </button>
 
 <div
-id="pairCode"
-class="code hidden"
+    id="pairCode"
+    class="code hidden"
 >
 ------
 </div>
 
 <div
-id="pairStatus"
-class="status"
+    id="pairStatus"
+    class="status"
 >
 </div>
 
@@ -262,14 +440,16 @@ class="status"
 <h2>📱 Connected Devices</h2>
 
 <div id="devices">
+
 <div class="empty">
-No device loaded
+Connect to the server first
 </div>
+
 </div>
 
 <button
-class="gray"
-onclick="loadDevices()"
+    class="gray"
+    onclick="loadDevices()"
 >
 🔄 Refresh Devices
 </button>
@@ -280,25 +460,25 @@ onclick="loadDevices()"
 <!-- REMOTE STORAGE -->
 
 <div
-class="card hidden"
-id="storageCard"
+    class="card hidden"
+    id="storageCard"
 >
 
 <h2>📦 Remote Storage</h2>
 
 <div
-id="storageStatus"
-class="status"
+    id="storageStatus"
+    class="status"
 >
 Select a connected device
 </div>
 
-<div
-id="remoteFiles"
->
+<div id="remoteFiles">
+
 <div class="empty">
 No files loaded
 </div>
+
 </div>
 
 </div>
@@ -308,25 +488,227 @@ No files loaded
 
 <script>
 
+/* =========================================================
+   CLOUD VAULT CLIENT
+========================================================= */
+
 let currentPairCode = null;
+
 let selectedDevice = null;
 
+let API_KEY =
+    localStorage.getItem(
+        "cloudVaultApiKey"
+    ) || "";
 
-/* =========================================
+
+/* =========================================================
+   INITIALIZE
+========================================================= */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+
+        const input =
+            document.getElementById(
+                "apiKey"
+            );
+
+        input.value = API_KEY;
+
+        if(API_KEY){
+
+            document.getElementById(
+                "authStatus"
+            ).textContent =
+                "Saved API key found. Testing server...";
+
+            testConnection();
+
+        }
+
+    }
+);
+
+
+/* =========================================================
+   SAVE API KEY
+========================================================= */
+
+function saveApiKey(){
+
+    const input =
+        document.getElementById(
+            "apiKey"
+        );
+
+    const key =
+        input.value.trim();
+
+    if(!key){
+
+        document.getElementById(
+            "authStatus"
+        ).textContent =
+            "❌ API key required";
+
+        return;
+
+    }
+
+    API_KEY = key;
+
+    localStorage.setItem(
+        "cloudVaultApiKey",
+        API_KEY
+    );
+
+    testConnection();
+
+}
+
+
+/* =========================================================
+   CLEAR API KEY
+========================================================= */
+
+function clearApiKey(){
+
+    API_KEY = "";
+
+    localStorage.removeItem(
+        "cloudVaultApiKey"
+    );
+
+    document.getElementById(
+        "apiKey"
+    ).value = "";
+
+    document.getElementById(
+        "authStatus"
+    ).textContent =
+        "API key removed.";
+
+}
+
+
+/* =========================================================
+   AUTHENTICATED FETCH
+========================================================= */
+
+async function apiFetch(
+    url,
+    options = {}
+){
+
+    if(!API_KEY){
+
+        throw new Error(
+            "API key is not configured in this browser."
+        );
+
+    }
+
+    const headers = {
+        ...(options.headers || {}),
+        "X-API-Key": API_KEY
+    };
+
+    return fetch(
+        url,
+        {
+            ...options,
+            headers
+        }
+    );
+
+}
+
+
+/* =========================================================
+   TEST CONNECTION
+========================================================= */
+
+async function testConnection(){
+
+    const status =
+        document.getElementById(
+            "authStatus"
+        );
+
+    status.textContent =
+        "Connecting to Cloud Vault server...";
+
+    status.className =
+        "key-status";
+
+    try{
+
+        const response =
+            await apiFetch(
+                "/api/status",
+                {
+                    cache:"no-store"
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if(!response.ok){
+
+            throw new Error(
+                data.error ||
+                "Authentication failed"
+            );
+
+        }
+
+        status.textContent =
+            "✅ Cloud Vault connected successfully.";
+
+        status.className =
+            "key-status success";
+
+        await loadDevices();
+
+    }catch(error){
+
+        status.textContent =
+            "❌ " +
+            error.message;
+
+        status.className =
+            "key-status error";
+
+    }
+
+}
+
+
+/* =========================================================
    GENERATE PAIR CODE
-========================================= */
+========================================================= */
 
 async function createPairCode(){
 
     const output =
-        document.getElementById("pairCode");
+        document.getElementById(
+            "pairCode"
+        );
 
     const status =
-        document.getElementById("pairStatus");
+        document.getElementById(
+            "pairStatus"
+        );
 
-    output.classList.remove("hidden");
+    output.classList.remove(
+        "hidden"
+    );
 
-    output.textContent = "------";
+    output.textContent =
+        "------";
 
     status.textContent =
         "Creating secure pairing code...";
@@ -334,10 +716,11 @@ async function createPairCode(){
     try{
 
         const response =
-            await fetch(
+            await apiFetch(
                 "/api/remote/pair/create",
                 {
                     method:"POST",
+
                     headers:{
                         "Content-Type":
                             "application/json"
@@ -366,37 +749,52 @@ async function createPairCode(){
         status.textContent =
             "Enter this code in the second phone APK.";
 
-        watchPairing(data.code);
+        watchPairing(
+            data.code
+        );
 
     }catch(error){
 
         status.textContent =
-            "❌ " + error.message;
+            "❌ " +
+            error.message;
 
     }
 
 }
 
 
-/* =========================================
+/* =========================================================
    WATCH PAIRING
-========================================= */
+========================================================= */
 
-async function watchPairing(code){
+async function watchPairing(
+    code
+){
 
     const status =
-        document.getElementById("pairStatus");
+        document.getElementById(
+            "pairStatus"
+        );
 
-    for(let i=0;i<120;i++){
+    for(
+        let i = 0;
+        i < 150;
+        i++
+    ){
 
-        await sleep(2000);
+        await sleep(
+            2000
+        );
 
         try{
 
             const response =
-                await fetch(
+                await apiFetch(
                     "/api/remote/pair/status/" +
-                    encodeURIComponent(code),
+                    encodeURIComponent(
+                        code
+                    ),
                     {
                         cache:"no-store"
                     }
@@ -405,7 +803,10 @@ async function watchPairing(code){
             const data =
                 await response.json();
 
-            if(data.status === "authorized"){
+            if(
+                data.status ===
+                "authorized"
+            ){
 
                 status.textContent =
                     "✅ Second phone connected successfully.";
@@ -413,23 +814,17 @@ async function watchPairing(code){
                 await loadDevices();
 
                 return;
-            }
-
-            if(data.status === "approved"){
-
-                status.textContent =
-                    "📱 Phone approved. Waiting for connection...";
-
-            }else{
-
-                status.textContent =
-                    "⏳ Waiting for second phone...";
 
             }
+
+            status.textContent =
+                "⏳ Waiting for second phone...";
 
         }catch(error){
 
-            console.log(error);
+            console.log(
+                error
+            );
 
         }
 
@@ -441,14 +836,16 @@ async function watchPairing(code){
 }
 
 
-/* =========================================
+/* =========================================================
    LOAD DEVICES
-========================================= */
+========================================================= */
 
 async function loadDevices(){
 
     const container =
-        document.getElementById("devices");
+        document.getElementById(
+            "devices"
+        );
 
     container.innerHTML =
         '<div class="empty">Loading...</div>';
@@ -456,7 +853,7 @@ async function loadDevices(){
     try{
 
         const response =
-            await fetch(
+            await apiFetch(
                 "/api/remote/devices",
                 {
                     cache:"no-store"
@@ -466,8 +863,19 @@ async function loadDevices(){
         const devices =
             await response.json();
 
+        if(!response.ok){
+
+            throw new Error(
+                devices.error ||
+                "Could not load devices"
+            );
+
+        }
+
         if(
-            !Array.isArray(devices) ||
+            !Array.isArray(
+                devices
+            ) ||
             devices.length === 0
         ){
 
@@ -477,6 +885,7 @@ async function loadDevices(){
                 '</div>';
 
             return;
+
         }
 
         container.innerHTML =
@@ -495,6 +904,9 @@ async function loadDevices(){
                             ""
                         );
 
+                    const online =
+                        device.online;
+
                     return `
 
                     <div class="device">
@@ -505,6 +917,25 @@ async function loadDevices(){
 
                         <div class="device-info">
                             Device ID: ${id}
+                        </div>
+
+                        <div class="device-info">
+                            Status:
+                            ${
+                                online
+                                ? "🟢 Online"
+                                : "🔴 Offline"
+                            }
+                        </div>
+
+                        <div class="device-info">
+                            Files:
+                            ${
+                                Number(
+                                    device.fileCount ||
+                                    0
+                                )
+                            }
                         </div>
 
                         <button
@@ -532,7 +963,10 @@ async function loadDevices(){
 
         container.innerHTML =
             '<div class="empty">' +
-            '❌ Could not load devices' +
+            '❌ ' +
+            escapeHTML(
+                error.message
+            ) +
             '</div>';
 
     }
@@ -540,21 +974,29 @@ async function loadDevices(){
 }
 
 
-/* =========================================
+/* =========================================================
    SELECT DEVICE
-========================================= */
+========================================================= */
 
-async function selectDevice(deviceId){
+async function selectDevice(
+    deviceId
+){
 
     selectedDevice =
         deviceId;
 
     document
-        .getElementById("storageCard")
-        .classList.remove("hidden");
+        .getElementById(
+            "storageCard"
+        )
+        .classList.remove(
+            "hidden"
+        );
 
     document
-        .getElementById("storageStatus")
+        .getElementById(
+            "storageStatus"
+        )
         .textContent =
         "Loading remote storage...";
 
@@ -563,19 +1005,21 @@ async function selectDevice(deviceId){
 }
 
 
-/* =========================================
+/* =========================================================
    LOAD REMOTE FILES
-========================================= */
+========================================================= */
 
 async function loadRemoteFiles(){
 
     const list =
-        document.getElementById("remoteFiles");
+        document.getElementById(
+            "remoteFiles"
+        );
 
     try{
 
         const response =
-            await fetch(
+            await apiFetch(
                 "/api/remote/files/" +
                 encodeURIComponent(
                     selectedDevice
@@ -598,7 +1042,9 @@ async function loadRemoteFiles(){
         }
 
         if(
-            !Array.isArray(files) ||
+            !Array.isArray(
+                files
+            ) ||
             files.length === 0
         ){
 
@@ -607,7 +1053,15 @@ async function loadRemoteFiles(){
                 '📭 No files found' +
                 '</div>';
 
+            document
+                .getElementById(
+                    "storageStatus"
+                )
+                .textContent =
+                "No remote files";
+
             return;
+
         }
 
         list.innerHTML =
@@ -616,7 +1070,8 @@ async function loadRemoteFiles(){
 
                     const name =
                         escapeHTML(
-                            file.name
+                            file.name ||
+                            "Unnamed file"
                         );
 
                     const size =
@@ -670,7 +1125,9 @@ async function loadRemoteFiles(){
             ).join("");
 
         document
-            .getElementById("storageStatus")
+            .getElementById(
+                "storageStatus"
+            )
             .textContent =
             files.length +
             " remote item(s) found";
@@ -680,7 +1137,9 @@ async function loadRemoteFiles(){
         list.innerHTML =
             '<div class="empty">' +
             '❌ ' +
-            escapeHTML(error.message) +
+            escapeHTML(
+                error.message
+            ) +
             '</div>';
 
     }
@@ -688,29 +1147,37 @@ async function loadRemoteFiles(){
 }
 
 
-/* =========================================
-   DOWNLOAD REMOTE FILE
-========================================= */
+/* =========================================================
+   REMOTE DOWNLOAD
+========================================================= */
 
-async function downloadRemote(fileId){
+async function downloadRemote(
+    fileId
+){
 
     try{
 
         const response =
-            await fetch(
+            await apiFetch(
                 "/api/remote/download",
                 {
                     method:"POST",
+
                     headers:{
                         "Content-Type":
                             "application/json"
                     },
-                    body:JSON.stringify({
-                        deviceId:
-                            selectedDevice,
-                        fileId:
-                            fileId
-                    })
+
+                    body:
+                        JSON.stringify({
+
+                            deviceId:
+                                selectedDevice,
+
+                            fileId:
+                                fileId
+
+                        })
                 }
             );
 
@@ -727,7 +1194,7 @@ async function downloadRemote(fileId){
         }
 
         alert(
-            "✅ Download request sent to second phone."
+            "✅ Download command sent to second phone."
         );
 
     }catch(error){
@@ -742,11 +1209,13 @@ async function downloadRemote(fileId){
 }
 
 
-/* =========================================
-   DELETE REMOTE FILE
-========================================= */
+/* =========================================================
+   REMOTE DELETE
+========================================================= */
 
-async function deleteRemote(fileId){
+async function deleteRemote(
+    fileId
+){
 
     if(
         !confirm(
@@ -761,20 +1230,26 @@ async function deleteRemote(fileId){
     try{
 
         const response =
-            await fetch(
+            await apiFetch(
                 "/api/remote/delete",
                 {
                     method:"POST",
+
                     headers:{
                         "Content-Type":
                             "application/json"
                     },
-                    body:JSON.stringify({
-                        deviceId:
-                            selectedDevice,
-                        fileId:
-                            fileId
-                    })
+
+                    body:
+                        JSON.stringify({
+
+                            deviceId:
+                                selectedDevice,
+
+                            fileId:
+                                fileId
+
+                        })
                 }
             );
 
@@ -808,11 +1283,13 @@ async function deleteRemote(fileId){
 }
 
 
-/* =========================================
-   DISCONNECT
-========================================= */
+/* =========================================================
+   DISCONNECT DEVICE
+========================================================= */
 
-async function disconnectDevice(deviceId){
+async function disconnectDevice(
+    deviceId
+){
 
     if(
         !confirm(
@@ -827,18 +1304,23 @@ async function disconnectDevice(deviceId){
     try{
 
         const response =
-            await fetch(
+            await apiFetch(
                 "/api/remote/disconnect",
                 {
                     method:"POST",
+
                     headers:{
                         "Content-Type":
                             "application/json"
                     },
-                    body:JSON.stringify({
-                        deviceId:
-                            deviceId
-                    })
+
+                    body:
+                        JSON.stringify({
+
+                            deviceId:
+                                deviceId
+
+                        })
                 }
             );
 
@@ -854,11 +1336,16 @@ async function disconnectDevice(deviceId){
 
         }
 
-        selectedDevice = null;
+        selectedDevice =
+            null;
 
         document
-            .getElementById("storageCard")
-            .classList.add("hidden");
+            .getElementById(
+                "storageCard"
+            )
+            .classList.add(
+                "hidden"
+            );
 
         await loadDevices();
 
@@ -874,11 +1361,13 @@ async function disconnectDevice(deviceId){
 }
 
 
-/* =========================================
+/* =========================================================
    HELPERS
-========================================= */
+========================================================= */
 
-function sleep(ms){
+function sleep(
+    ms
+){
 
     return new Promise(
         resolve =>
@@ -891,34 +1380,39 @@ function sleep(ms){
 }
 
 
-function escapeHTML(value){
+function escapeHTML(
+    value
+){
 
-    return String(value)
-        .replace(
-            /[&<>"']/g,
-            character => {
+    return String(
+        value
+    ).replace(
+        /[&<>"']/g,
+        character => {
 
-                const entities = {
+            const entities = {
 
-                    "&":"&amp;",
-                    "<":"&lt;",
-                    ">":"&gt;",
-                    '"':"&quot;",
-                    "'":"&#039;"
+                "&":"&amp;",
+                "<":"&lt;",
+                ">":"&gt;",
+                '"':"&quot;",
+                "'":"&#039;"
 
-                };
+            };
 
-                return entities[
-                    character
-                ];
+            return entities[
+                character
+            ];
 
-            }
-        );
+        }
+    );
 
 }
 
 
-function formatBytes(bytes){
+function formatBytes(
+    bytes
+){
 
     if(
         !bytes ||
@@ -930,12 +1424,22 @@ function formatBytes(bytes){
     }
 
     const units =
-        ["B","KB","MB","GB","TB"];
+        [
+            "B",
+            "KB",
+            "MB",
+            "GB",
+            "TB"
+        ];
 
     const index =
         Math.floor(
-            Math.log(bytes) /
-            Math.log(1024)
+            Math.log(
+                bytes
+            ) /
+            Math.log(
+                1024
+            )
         );
 
     return (
@@ -946,7 +1450,9 @@ function formatBytes(bytes){
                 index
             )
         ).toFixed(
-            index === 0 ? 0 : 2
+            index === 0
+                ? 0
+                : 2
         )
         +
         " " +
@@ -955,10 +1461,7 @@ function formatBytes(bytes){
 
 }
 
-
-loadDevices();
-
 </script>
 
 </body>
-  </html>
+    </html>
