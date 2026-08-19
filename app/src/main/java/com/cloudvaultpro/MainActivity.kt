@@ -1,5 +1,4 @@
-MainActivity.kt
-
+cat > app/src/main/java/com/cloudvault/pro/MainActivity.kt <<'EOF'
 package com.cloudvault.pro
 
 import android.os.Bundle
@@ -48,8 +47,8 @@ class MainActivity : AppCompatActivity() {
         thread {
             try {
                 val connection =
-                    URL("$serverUrl/api/status")
-                        .openConnection() as HttpURLConnection
+                    URL("$serverUrl/api/status").openConnection()
+                            as HttpURLConnection
 
                 connection.requestMethod = "GET"
                 connection.setRequestProperty("X-API-Key", apiKey)
@@ -89,8 +88,8 @@ class MainActivity : AppCompatActivity() {
         thread {
             try {
                 val connection =
-                    URL("$serverUrl/api/health")
-                        .openConnection() as HttpURLConnection
+                    URL("$serverUrl/api/health").openConnection()
+                            as HttpURLConnection
 
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15000
@@ -117,3 +116,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+EOF
